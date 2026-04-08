@@ -1,0 +1,181 @@
+using System;
+using UnityEngine;
+using DG.Tweening;
+using System.Collections.Generic;
+
+public class GraphManager : MonoBehaviour
+{
+    [Header("References")]
+    [SerializeField] private Transform graphRoot;
+    [SerializeField] private Transform playerCamera;
+
+    [Header("Data")]
+    [SerializeField] private GraphData graphData;
+
+    [Header("Settings")]
+    [SerializeField] private GraphSettings settings;
+
+    private readonly List<GameObject> _spawnedDots = new List<GameObject>();
+    private LineRenderer _lineRenderer;
+    private LineRenderer _groundLineRenderer;
+    
+    private bool _isGenerating = false;
+    private Sequence _generationSequence;
+
+    private void Start()
+    {
+        GenerateGraph();
+    }
+
+    // PUBLIC ENTRY POINT
+    [ContextMenu("GenerateGraph")]
+    private void GenerateGraph()
+    {
+        if (_isGenerating)
+        {
+            Debug.LogWarning("Graph generation already in progress!");
+            return;
+        }
+
+        _isGenerating = true;
+
+        ResetGraph();
+        Generate();
+    }
+
+    // RESET BEFORE REGEN
+    private void ResetGraph()
+    {
+        foreach (var dot in _spawnedDots)
+        {
+            if (dot != null) Destroy(dot);
+        }
+        _spawnedDots.Clear();
+
+        if (_lineRenderer != null)
+        {
+            Destroy(_lineRenderer.gameObject);
+        }
+
+        graphRoot.rotation = Quaternion.identity;
+    }
+
+    // CORE GENERATION
+    private void Generate()
+    {
+        if (graphData == null || graphData.values.Count == 0)
+        {
+            Debug.LogWarning("No graph data assigned!");
+            _isGenerating = false;
+            return;
+        }
+
+        _generationSequence = DOTween.Sequence();
+
+        // Create LineRenderer
+        GameObject lineObj = new GameObject("Line");
+        lineObj.transform.SetParent(graphRoot);
+        _lineRenderer = lineObj.AddComponent<LineRenderer>();
+        _lineRenderer.useWorldSpace = false;
+        _lineRenderer.widthMultiplier = 0.05f;
+        _lineRenderer.positionCount = 0;
+        _lineRenderer.material = new Material(Shader.Find("Sprites/Default"));
+        
+        GameObject groundLineObj = new GameObject("GroundLine");
+        groundLineObj.transform.SetParent(graphRoot);
+        _groundLineRenderer = groundLineObj.AddComponent<LineRenderer>();
+        
+        _groundLineRenderer.startColor = Color.gray;
+        _groundLineRenderer.endColor = Color.gray;
+
+        _groundLineRenderer.useWorldSpace = false;
+        _groundLineRenderer.widthMultiplier = 0.03f;
+        _groundLineRenderer.positionCount = 0;
+        _groundLineRenderer.material = new Material(Shader.Find("Sprites/Default"));
+
+        Vector3[] positions = new Vector3[graphData.values.Count];
+
+        for (int i = 0; i < graphData.values.Count; i++)
+        {
+            float value = graphData.values[i];
+
+            Vector3 localPos = new Vector3(i * settings.spacing, value * settings.heightScale, 0);
+
+            positions[i] = localPos;
+
+            float delay = i * settings.delayBetweenPoints;
+
+            // DOT animation
+            _generationSequence.Insert(delay, CreateDotTween(localPos));
+
+            // LINE animation (slight offset after dot)
+            _generationSequence.Insert(delay + 0.1f, CreateLineTween(localPos));
+            _generationSequence.Insert(delay + 0.1f, CreateGroundLineTween(localPos));
+        }
+
+        // After everything → ALIGNMENT
+        _generationSequence.AppendInterval(0.2f);
+        _generationSequence.AppendCallback(() => StartAlignment());
+
+        _generationSequence.OnComplete(() =>
+        {
+            _isGenerating = false;
+        });
+    }
+    
+    private Tween CreateDotTween(Vector3 localPos)
+    {
+        GameObject dot = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        dot.transform.SetParent(graphRoot);
+        dot.transform.localPosition = localPos;
+        dot.transform.localScale = Vector3.zero;
+
+        _spawnedDots.Add(dot);
+
+        return dot.transform.DOScale(settings.dotSize, settings.spawnDuration).SetEase(Ease.OutBack);
+    }
+    
+    private Tween CreateLineTween(Vector3 localPos)
+    {
+        return DOVirtual.DelayedCall(0, () =>
+        {
+            _lineRenderer.positionCount++;
+            _lineRenderer.SetPosition(_lineRenderer.positionCount - 1, localPos);
+        });
+    }
+    
+    private Tween CreateGroundLineTween(Vector3 localPos)
+    {
+        Vector3 groundPos = new Vector3(localPos.x, 0, 0);
+
+        return DOVirtual.DelayedCall(0, () =>
+        {
+            _groundLineRenderer.positionCount++;
+            _groundLineRenderer.SetPosition(_groundLineRenderer.positionCount - 1, groundPos);
+        });
+    }
+
+    private void StartAlignment()
+    {
+        Vector3 forward = playerCamera.forward;
+        forward.y = 0;
+
+        Quaternion alignToForward = Quaternion.LookRotation(forward) * Quaternion.Euler(0, -90f, 0);
+
+        Sequence alignSeq = DOTween.Sequence();
+
+        // STEP 1
+        alignSeq.Append(
+            graphRoot.DORotateQuaternion(alignToForward, 0.8f)
+                .SetEase(Ease.OutCubic)
+        );
+
+        // STEP 2 (relative rotation, no euler)
+        alignSeq.Append(
+            graphRoot.DORotateQuaternion(
+                alignToForward * Quaternion.Euler(90f, 0f, 0f),
+                0.8f
+            ).SetEase(Ease.InOutSine)
+        );
+    }
+}
