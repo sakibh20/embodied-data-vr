@@ -5,4 +5,8 @@ using System.Collections.Generic;
 public class GraphData : ScriptableObject
 {
     public List<float> values;
+    public string unit = "kWh";
+    public string prefix = "Day";
+    public float dataInterval = 5;
+
 }

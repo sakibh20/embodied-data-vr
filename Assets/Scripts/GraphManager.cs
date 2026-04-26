@@ -1,4 +1,3 @@
-using System;
 using UnityEngine;
 using DG.Tweening;
 using System.Collections.Generic;
@@ -6,6 +5,7 @@ using System.Collections.Generic;
 public class GraphManager : MonoBehaviour
 {
     [Header("References")]
+    [SerializeField] private DataPoint dataPoint;
     [SerializeField] private Transform graphRoot;
     [SerializeField] private Transform playerCamera;
 
@@ -15,17 +15,17 @@ public class GraphManager : MonoBehaviour
     [Header("Settings")]
     [SerializeField] private GraphSettings settings;
 
-    private readonly List<GameObject> _spawnedDots = new List<GameObject>();
+    private readonly List<DataPoint> _spawnedDots = new List<DataPoint>();
     private LineRenderer _lineRenderer;
     private LineRenderer _groundLineRenderer;
     
     private bool _isGenerating = false;
     private Sequence _generationSequence;
 
-    private void Start()
-    {
-        GenerateGraph();
-    }
+    // private void Start()
+    // {
+    //     GenerateGraph();
+    // }
 
     // PUBLIC ENTRY POINT
     [ContextMenu("GenerateGraph")]
@@ -61,7 +61,7 @@ public class GraphManager : MonoBehaviour
     }
 
     // CORE GENERATION
-    private void Generate()
+    public void Generate()
     {
         if (graphData == null || graphData.values.Count == 0)
         {
@@ -106,7 +106,7 @@ public class GraphManager : MonoBehaviour
             float delay = i * settings.delayBetweenPoints;
 
             // DOT animation
-            _generationSequence.Insert(delay, CreateDotTween(localPos));
+            _generationSequence.Insert(delay, CreateDotTween(localPos, i));
 
             // LINE animation (slight offset after dot)
             _generationSequence.Insert(delay + 0.1f, CreateLineTween(localPos));
@@ -119,14 +119,20 @@ public class GraphManager : MonoBehaviour
 
         _generationSequence.OnComplete(() =>
         {
+            foreach (DataPoint point in _spawnedDots)
+            {
+                point.Show();
+            }
             _isGenerating = false;
         });
     }
     
-    private Tween CreateDotTween(Vector3 localPos)
+    private Tween CreateDotTween(Vector3 localPos, int index)
     {
-        GameObject dot = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-        dot.transform.SetParent(graphRoot);
+        //GameObject dot = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        DataPoint dot = Instantiate(dataPoint, graphRoot);
+        dot.Init(index, graphData);
+        //dot.transform.SetParent(graphRoot);
         dot.transform.localPosition = localPos;
         dot.transform.localScale = Vector3.zero;
 

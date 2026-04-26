@@ -13,13 +13,16 @@ MonoBehaviour:
   m_Name: GraphData
   m_EditorClassIdentifier: Assembly-CSharp::GraphData
   values:
-  - 4.6
-  - 2.3
-  - 5.1
-  - 9.2
-  - 6.7
-  - 5.5
+  - 4.2
+  - 3.5
+  - 5.3
+  - 4.1
+  - 3.4
+  - 4.4
   - 4.8
-  - 3.3
-  - 6.1
-  - 6.9
+  - 3.9
+  - 4.3
+  - 4
+  unit: kWh
+  prefix: Day
+  dataInterval: 5
