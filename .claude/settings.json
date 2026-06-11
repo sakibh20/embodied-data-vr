@@ -1,0 +1,42 @@
+{
+  "extraKnownMarketplaces": {
+    "sakib-claude-plugins": {
+      "source": {
+        "source": "github",
+        "repo": "sakibh20/sakib-claude-plugins.git"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "unity-dev@sakib-claude-plugins": true
+  },
+  "claudeMdExcludes": [
+    "**/Library/**",
+    "**/Temp/**",
+    "**/Obj/**",
+    "**/Logs/**",
+    "**/Build/**",
+    "**/Builds/**"
+  ],
+  "permissions": {
+    "deny": [
+      "Read(./Library/**)",
+      "Read(./Temp/**)",
+      "Read(./Obj/**)",
+      "Read(./Logs/**)",
+      "Read(./Build/**)",
+      "Read(./Builds/**)",
+      "Read(./UserSettings/**)",
+      "Read(./.vs/**)",
+      "Read(./.gradle/**)",
+      "Read(./.idea/**)",
+      "Read(./**/*.dll)",
+      "Read(./**/*.so)",
+      "Read(./**/*.aar)",
+      "Read(./**/*.pdb)",
+      "Read(./**/*.apk)",
+      "Read(./**/*.aab)",
+      "Read(./**/*.unitypackage)"
+    ]
+  }
+}

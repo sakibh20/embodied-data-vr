@@ -8,6 +8,7 @@ public class GraphManager : MonoBehaviour
     [SerializeField] private DataPoint dataPoint;
     [SerializeField] private Transform graphRoot;
     [SerializeField] private Transform playerCamera;
+    [SerializeField] private GridGenerator gridGenerator;
 
     [Header("Data")]
     [SerializeField] private GraphData graphData;
@@ -18,7 +19,7 @@ public class GraphManager : MonoBehaviour
     private readonly List<DataPoint> _spawnedDots = new List<DataPoint>();
     private LineRenderer _lineRenderer;
     private LineRenderer _groundLineRenderer;
-    
+
     private bool _isGenerating = false;
     private Sequence _generationSequence;
 
@@ -123,6 +124,14 @@ public class GraphManager : MonoBehaviour
             {
                 point.Show();
             }
+
+            // Generate grid after graph is complete
+            if (gridGenerator != null)
+            {
+                // Pass graphRoot so the grid shares the graph's alignment (rotate + flip).
+                gridGenerator.GenerateGrid(graphData, settings, graphRoot);
+            }
+
             _isGenerating = false;
         });
     }

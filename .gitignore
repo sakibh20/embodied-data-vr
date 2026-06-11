@@ -46,3 +46,6 @@ sysinfo.txt
 # Builds
 *.apk
 *.unitypackage
+
+#Claude
+.claude/settings.local.json

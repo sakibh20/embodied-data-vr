@@ -1,7 +1,9 @@
 using UnityEngine;
 
-[System.Serializable]
-public class GraphSettings
+// Single shared source of truth for graph + grid layout. Referenced as an asset
+// by both GraphManager and GridGenerator so values never diverge between the two.
+[CreateAssetMenu(fileName = "GraphSettings", menuName = "Thesis/Graph Settings")]
+public class GraphSettings : ScriptableObject
 {
     public float spacing = 0.5f;
     public float heightScale = 0.2f;
