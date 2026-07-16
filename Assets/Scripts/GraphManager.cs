@@ -9,6 +9,7 @@ public class GraphManager : MonoBehaviour
     [SerializeField] private Transform graphRoot;
     [SerializeField] private Transform playerCamera;
     [SerializeField] private GridGenerator gridGenerator;
+    [SerializeField] private PathSampler pathSampler;
 
     [Header("Data")]
     [SerializeField] private GraphData graphData;
@@ -192,5 +193,13 @@ public class GraphManager : MonoBehaviour
                 0.8f
             ).SetEase(Ease.InOutSine)
         );
+
+        // Once aligned, the path's final world orientation is known: local +X (time
+        // axis) maps to graphRoot.right. Configure the sampler so the walk drives cues.
+        alignSeq.OnComplete(() =>
+        {
+            if (pathSampler != null && graphData != null)
+                pathSampler.Configure(graphRoot.position, graphRoot.right, settings.spacing, graphData.values);
+        });
     }
 }
