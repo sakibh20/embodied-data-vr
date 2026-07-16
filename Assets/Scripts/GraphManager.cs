@@ -29,6 +29,24 @@ public class GraphManager : MonoBehaviour
     //     GenerateGraph();
     // }
 
+    public bool IsGenerating => _isGenerating;
+    public GraphData Data => graphData;
+
+    /// <summary>Swap the dataset to render on the next GenerateGraph (used per trial).</summary>
+    public void SetData(GraphData data) => graphData = data;
+
+    /// <summary>
+    /// Show/hide the line + dots (and their value tags) for the retrace phase.
+    /// The grid stays visible so it can still guide walk spacing.
+    /// </summary>
+    public void SetGraphVisible(bool visible)
+    {
+        if (_lineRenderer != null) _lineRenderer.enabled = visible;
+        if (_groundLineRenderer != null) _groundLineRenderer.enabled = visible;
+        foreach (var dot in _spawnedDots)
+            if (dot != null) dot.gameObject.SetActive(visible);
+    }
+
     // PUBLIC ENTRY POINT
     [ContextMenu("GenerateGraph")]
     public void GenerateGraph()

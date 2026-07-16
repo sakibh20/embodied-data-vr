@@ -903,6 +903,64 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: fd28f23af44f73f4a95e33435872ad15, type: 3}
+--- !u!1 &340592379
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 340592381}
+  - component: {fileID: 340592380}
+  m_Layer: 0
+  m_Name: SessionController
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &340592380
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 340592379}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e4ceb91e1dad9db4dbdae29f972a759c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SessionController
+  graphManager: {fileID: 0}
+  conditionManager: {fileID: 0}
+  player: {fileID: 0}
+  datasetPool:
+  - {fileID: 11400000, guid: 0b11a8862899faa449b8b77d96b3512f, type: 2}
+  - {fileID: 11400000, guid: 6e43ecf4f1f293648b44a53080c8d47e, type: 2}
+  - {fileID: 11400000, guid: 82a1b899ef18b1a4b9d7842772728420, type: 2}
+  - {fileID: 11400000, guid: cc67ad860e1f1d24296c11e83775cfc6, type: 2}
+  - {fileID: 11400000, guid: 527a0db3dcab1904088a58d6f7b894f8, type: 2}
+  - {fileID: 11400000, guid: b63734f07a494384e92f7f7fcb1bdc2b, type: 2}
+  participantId: 1
+  trialsPerCondition: 1
+  retraceSampleInterval: 0.1
+  debugKeys: 1
+--- !u!4 &340592381
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 340592379}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &407123595
 GameObject:
   m_ObjectHideFlags: 0
@@ -2832,3 +2890,4 @@ SceneRoots:
   - {fileID: 2016803393}
   - {fileID: 297737336}
   - {fileID: 1018251982}
+  - {fileID: 340592381}
