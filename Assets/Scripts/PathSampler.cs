@@ -8,6 +8,14 @@ using UnityEngine;
 /// </summary>
 public class PathSampler : MonoBehaviour
 {
+    [Header("Region")]
+    [Tooltip("Slack (metres) allowed before the first point and after the last " +
+             "before the participant counts as off the walk.")]
+    [SerializeField] private float regionMargin = 0.5f;
+    [Tooltip("Half-width (metres) of the walkable corridor either side of the path " +
+             "centre line. Beyond this the participant is off the graph.")]
+    [SerializeField] private float regionHalfWidth = 2f;
+
     private Vector3 _start;          // world position of data point 0 (time origin)
     private Vector3 _dir;            // unit forward along the path (walk/time axis), on the ground
     private float _segment;          // world distance between adjacent points (= GraphSettings.spacing)
@@ -42,6 +50,26 @@ public class PathSampler : MonoBehaviour
 
     /// <summary>Signed distance the position has progressed along the path forward axis.</summary>
     public float DistanceAlong(Vector3 worldPos) => Vector3.Dot(worldPos - _start, _dir);
+
+    /// <summary>
+    /// True when the position is within the walkable graph corridor: between the
+    /// ends (plus margin) along the path, and within the lateral half-width of the
+    /// centre line. Height is ignored. Used to gate cues so they only run while the
+    /// participant is actually on the walk.
+    /// </summary>
+    public bool IsWithinRegion(Vector3 worldPos)
+    {
+        if (!_ready) return false;
+
+        float d = DistanceAlong(worldPos);
+        if (d < -regionMargin || d > TotalLength + regionMargin) return false;
+
+        // Lateral offset from the centre line (clamp the foot point to the segment).
+        Vector3 foot = _start + _dir * Mathf.Clamp(d, 0f, TotalLength);
+        Vector3 lateral = worldPos - foot;
+        lateral.y = 0f;
+        return lateral.magnitude <= regionHalfWidth;
+    }
 
     /// <summary>Normalized progress along the whole walk, 0..1.</summary>
     public float Progress01(Vector3 worldPos)

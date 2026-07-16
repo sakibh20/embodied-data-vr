@@ -28,6 +28,15 @@ public class WalkValueDriver : MonoBehaviour
     {
         if (!active || player == null || path == null || !path.IsReady) return;
 
+        // Cues run only while the participant is on the walk; outside the graph
+        // region they are gated off (silent, no density) rather than clamped.
+        bool inRegion = path.IsWithinRegion(player.position);
+
+        if (conditionManager != null)
+            conditionManager.SetCuesActive(inRegion);
+
+        if (!inRegion) return;
+
         float normalized = path.NormalizedValueAt(player.position);
         debugNormalizedValue = normalized;
 

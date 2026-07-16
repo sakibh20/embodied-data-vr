@@ -31,7 +31,7 @@ public class GraphManager : MonoBehaviour
 
     // PUBLIC ENTRY POINT
     [ContextMenu("GenerateGraph")]
-    private void GenerateGraph()
+    public void GenerateGraph()
     {
         if (_isGenerating)
         {
@@ -50,7 +50,7 @@ public class GraphManager : MonoBehaviour
     {
         foreach (var dot in _spawnedDots)
         {
-            if (dot != null) Destroy(dot);
+            if (dot != null) Destroy(dot.gameObject);
         }
         _spawnedDots.Clear();
 

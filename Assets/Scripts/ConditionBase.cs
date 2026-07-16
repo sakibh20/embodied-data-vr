@@ -3,13 +3,16 @@ using UnityEngine;
 /// <summary>
 /// The five study conditions (see modified_plan.txt).
 /// </summary>
+// A 2×2 over whether each modality's cue is representative (semantic, "electric")
+// vs generic, plus a no-cue control. In conditions 2–5 BOTH cues track the data
+// (density + audio tempo/pitch rise with value); only the asset's meaning changes.
 public enum ConditionId
 {
-    Control,                 // 1. embodied baseline: graph + grid, neutral environment
-    Abstract,                // 2. generic cross-modal cues (sphere density + abstract audio)
-    Representative,          // 3. semantic cues (sparks + energy audio)
-    MismatchStaticAudio,     // 4. static electric audio, mismatched visuals
-    MismatchNonRepAudio      // 5. aligned visuals, non-representative audio
+    Control,          // 1. embodied baseline: graph + grid, neutral environment; no cues
+    Abstract,         // 2. generic audio + generic visual (beep + sphere)
+    Representative,   // 3. representative audio + representative visual (electric hum + spark)
+    SemanticAudio,    // 4. representative audio, generic visual (electric hum + sphere)
+    SemanticVisual    // 5. representative visual, generic audio (spark + beep)
 }
 
 /// <summary>
@@ -35,4 +38,11 @@ public abstract class ConditionBase : MonoBehaviour
 
     /// <summary>Drive the cues from the current normalized walk value (0..1).</summary>
     public abstract void SetNormalizedValue(float normalized);
+
+    /// <summary>
+    /// Gate the cues on/off without switching condition: cues run only while the
+    /// participant is on the walk (see PathSampler.IsWithinRegion). Default no-op
+    /// (Control has nothing to gate).
+    /// </summary>
+    public virtual void SetCuesActive(bool active) { }
 }

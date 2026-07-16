@@ -26,6 +26,9 @@ public class DensityController : MonoBehaviour
         AdjustPool(targetCount);
     }
 
+    /// <summary>Remove all spawned objects (used when cues are gated off).</summary>
+    public void Clear() => AdjustPool(0);
+
     private void AdjustPool(int targetCount)
     {
         // Add objects

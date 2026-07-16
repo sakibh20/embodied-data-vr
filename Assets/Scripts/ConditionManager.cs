@@ -20,6 +20,23 @@ public class ConditionManager : MonoBehaviour
     public ConditionId Current => current;
     public ConditionBase Active => _active;
 
+    private void Awake()
+    {
+        // Auto-discover conditions when the list wasn't hand-populated (empty) or
+        // has gone stale (a null/missing entry, e.g. after a component swap).
+        // Includes inactive objects, since deactivated conditions are SetActive(false).
+        bool hasNull = false;
+        if (conditions != null)
+            foreach (var c in conditions)
+                if (c == null) { hasNull = true; break; }
+
+        if (conditions == null || conditions.Count == 0 || hasNull)
+        {
+            conditions = new List<ConditionBase>(
+                FindObjectsByType<ConditionBase>(FindObjectsInactive.Include, FindObjectsSortMode.None));
+        }
+    }
+
     private void Start()
     {
         ApplyCurrent();
@@ -36,6 +53,12 @@ public class ConditionManager : MonoBehaviour
     public void SetNormalizedValue(float normalized)
     {
         if (_active != null) _active.SetNormalizedValue(normalized);
+    }
+
+    /// <summary>Gate the active condition's cues (on only while on the walk).</summary>
+    public void SetCuesActive(bool active)
+    {
+        if (_active != null) _active.SetCuesActive(active);
     }
 
     private void ApplyCurrent()
@@ -70,9 +93,9 @@ public class ConditionManager : MonoBehaviour
     [ContextMenu("Set Condition / 3 Representative")]
     private void _SetRepresentative() => SetCondition(ConditionId.Representative);
 
-    [ContextMenu("Set Condition / 4 Mismatch (static audio)")]
-    private void _SetMismatchStatic() => SetCondition(ConditionId.MismatchStaticAudio);
+    [ContextMenu("Set Condition / 4 Semantic Audio (electric hum + sphere)")]
+    private void _SetSemanticAudio() => SetCondition(ConditionId.SemanticAudio);
 
-    [ContextMenu("Set Condition / 5 Mismatch (non-rep audio)")]
-    private void _SetMismatchNonRep() => SetCondition(ConditionId.MismatchNonRepAudio);
+    [ContextMenu("Set Condition / 5 Semantic Visual (spark + beep)")]
+    private void _SetSemanticVisual() => SetCondition(ConditionId.SemanticVisual);
 }
