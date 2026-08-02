@@ -6,7 +6,12 @@ public class DensityController : MonoBehaviour
     [Header("Prefab")]
     [SerializeField] private GameObject spawnPrefab;
 
-    [Header("Area Settings")]
+    [Header("Area")]
+    [Tooltip("Shared room area the spheres/sparks fill. Auto-found if left empty. " +
+             "When set, it overrides the legacy areaSize/centerPoint below.")]
+    [SerializeField] private ExperimentArea area;
+
+    [Header("Area Settings (legacy fallback when no ExperimentArea)")]
     [SerializeField] private Vector2 areaSize = new Vector2(5f, 5f);
     [SerializeField] private Transform centerPoint;
 
@@ -18,6 +23,11 @@ public class DensityController : MonoBehaviour
     [SerializeField] private Vector2 sizeRange = new Vector2(0.1f, 0.3f);
 
     private readonly List<GameObject> _pool = new List<GameObject>();
+
+    private void Awake()
+    {
+        if (area == null) area = FindAnyObjectByType<ExperimentArea>();
+    }
 
     public void UpdateDensity(float normalizedValue)
     {
@@ -61,11 +71,13 @@ public class DensityController : MonoBehaviour
 
     private Vector3 GetRandomPosition()
     {
-        Vector3 center = centerPoint != null ? centerPoint.position : transform.position;
+        // Prefer the shared room area so the cue field shares the graph's centre.
+        if (area != null) return area.RandomPoint();
 
+        // Legacy fallback.
+        Vector3 center = centerPoint != null ? centerPoint.position : transform.position;
         float x = Random.Range(-areaSize.x / 2f, areaSize.x / 2f);
         float z = Random.Range(-areaSize.y / 2f, areaSize.y / 2f);
-
         return new Vector3(center.x + x, center.y, center.z + z);
     }
 }

@@ -11,10 +11,9 @@ public class GridGenerator : MonoBehaviour
     [SerializeField] private Color lineColor = Color.gray;
     [SerializeField] private float lineAlpha = 0.5f;
 
-    [Tooltip("Half-length of each per-point cross line, along the graph's value axis. " +
-             "Lines are authored in the graph's local XY plane so they lie flat on the " +
-             "ground after GraphManager's alignment flip.")]
-    [SerializeField] private float laneHalfWidth = 1f;
+    [Tooltip("Extra padding (local units) added beyond the data's value range at each " +
+             "end of the per-point cross lines, so the grid always over-spans the graph.")]
+    [SerializeField] private float laneHalfWidth = 0.3f;
 
     [Header("References")]
     [SerializeField] private Transform gridRoot;
@@ -73,28 +72,30 @@ public class GridGenerator : MonoBehaviour
         _lineMaterial = new Material(Shader.Find("Sprites/Default"));
         _lineMaterial.color = new Color(lineColor.r, lineColor.g, lineColor.b, lineAlpha);
 
-        // Calculate grid dimensions based on graph data
-        int gridWidth = graphData.values.Count;
-        float totalWidth = gridWidth * graphSettings.spacing;
+        // Size the cross-lines to the graph's actual value spread so they always
+        // span the whole graph (value maps to local Y = value * heightScale).
+        int n = graphData.values.Count;
+        float hs = graphSettings.heightScale;
+        float minV = float.MaxValue, maxV = float.MinValue;
+        foreach (var v in graphData.values) { if (v < minV) minV = v; if (v > maxV) maxV = v; }
 
-        // Cross line at each data point, spanning the local Y (value) axis so it lies
-        // in the same plane as the graph and flips flat onto the ground with it.
-        for (int x = 0; x <= gridWidth; x++)
+        float yLo = Mathf.Min(0f, minV * hs) - laneHalfWidth;   // laneHalfWidth = padding
+        float yHi = Mathf.Max(0f, maxV * hs) + laneHalfWidth;
+        float walkLen = Mathf.Max(0, n - 1) * graphSettings.spacing;
+
+        // Cross line at each data point, spanning the value axis (local Y). Lies in the
+        // graph's plane and flips flat + scales with it (grid is a child of graphRoot).
+        for (int i = 0; i < n; i++)
         {
-            float xPos = x * graphSettings.spacing;
-            CreateLine(
-                new Vector3(xPos, -laneHalfWidth, 0f),
-                new Vector3(xPos, laneHalfWidth, 0f)
-            );
+            float xPos = i * graphSettings.spacing;
+            CreateLine(new Vector3(xPos, yLo, 0f), new Vector3(xPos, yHi, 0f));
         }
 
-        // Center walk line along the X (time) axis.
-        CreateLine(
-            new Vector3(0, 0, 0),
-            new Vector3(totalWidth, 0, 0)
-        );
+        // Baseline walk line along the X (time) axis.
+        CreateLine(new Vector3(0f, 0f, 0f), new Vector3(walkLen, 0f, 0f));
 
-        Debug.Log($"Grid generated: {gridWidth} data points, spacing {graphSettings.spacing}, total width {totalWidth}");
+        Debug.Log($"Grid generated: {n} points, spacing {graphSettings.spacing}, " +
+                  $"walk {walkLen:0.##}, value span [{yLo:0.##},{yHi:0.##}]");
     }
 
     private void CreateLine(Vector3 start, Vector3 end)

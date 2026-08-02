@@ -17,6 +17,20 @@ public class GraphManager : MonoBehaviour
     [Header("Settings")]
     [SerializeField] private GraphSettings settings;
 
+    [Header("Room area (centre + walk direction only)")]
+    [Tooltip("Shared room area. The graph is centred on it and oriented along its " +
+             "walk axis. Its SIZE does NOT scale the graph — it only bounds the cue " +
+             "field. Auto-found if empty.")]
+    [SerializeField] private ExperimentArea area;
+
+    [Header("Graph size (independent of the area)")]
+    [Tooltip("Scale the finished graph so its walk spans this many metres. Uniform " +
+             "scale, so the data's shape is preserved and walk/retrace values stay correct.")]
+    [SerializeField] private bool resizeGraph = true;
+    [SerializeField] private float targetWalkLength = 3f;
+    [Tooltip("Seconds to tween the resize + centring after the graph lies flat.")]
+    [SerializeField] private float scaleTweenDuration = 0.6f;
+
     private readonly List<DataPoint> _spawnedDots = new List<DataPoint>();
     private LineRenderer _lineRenderer;
     private LineRenderer _groundLineRenderer;
@@ -78,6 +92,7 @@ public class GraphManager : MonoBehaviour
         }
 
         graphRoot.rotation = Quaternion.identity;
+        graphRoot.localScale = Vector3.one;   // clear any fit-to-area scale from a prior gen
     }
 
     // CORE GENERATION
@@ -89,6 +104,12 @@ public class GraphManager : MonoBehaviour
             _isGenerating = false;
             return;
         }
+
+        if (area == null) area = FindAnyObjectByType<ExperimentArea>();
+
+        // Pivot the graph on the area centre so the flip/rotation swings around it
+        // and the final graph shares the cue field's centre.
+        if (area != null) graphRoot.position = area.Center;
 
         _generationSequence = DOTween.Sequence();
 
@@ -191,7 +212,9 @@ public class GraphManager : MonoBehaviour
 
     private void StartAlignment()
     {
-        Vector3 forward = playerCamera.forward;
+        // Orient to the room area when present (fixed layout), else to the player.
+        Vector3 forward = area != null ? area.Forward
+                        : (playerCamera != null ? playerCamera.forward : Vector3.forward);
         forward.y = 0;
 
         Quaternion alignToForward = Quaternion.LookRotation(forward) * Quaternion.Euler(0, -90f, 0);
@@ -212,12 +235,53 @@ public class GraphManager : MonoBehaviour
             ).SetEase(Ease.InOutSine)
         );
 
-        // Once aligned, the path's final world orientation is known: local +X (time
-        // axis) maps to graphRoot.right. Configure the sampler so the walk drives cues.
-        alignSeq.OnComplete(() =>
-        {
-            if (pathSampler != null && graphData != null)
-                pathSampler.Configure(graphRoot.position, graphRoot.right, settings.spacing, graphData.values);
-        });
+        // Once flat, resize the graph to the requested walk length and centre it on
+        // the area — tweened, not an instant pop — then configure the sampler.
+        alignSeq.OnComplete(ApplyGraphSizeAndCentre);
+    }
+
+    // Uniformly scale the whole graph (dots + line + grid — all children of graphRoot)
+    // so its walk spans targetWalkLength, and move it so the dots' centre sits on the
+    // area centre. Uniform scale keeps the data's proportions, so the value read while
+    // walking/retracing is unchanged (PathSampler is reconfigured from final positions).
+    private void ApplyGraphSizeAndCentre()
+    {
+        if (_spawnedDots.Count == 0) { ConfigureSampler(); return; }
+
+        // Local bounds of the dots. Walk axis is local X (before the flat-lay flip).
+        Bounds lb = new Bounds(_spawnedDots[0].transform.localPosition, Vector3.zero);
+        foreach (var d in _spawnedDots) lb.Encapsulate(d.transform.localPosition);
+        Vector3 localCentre = lb.center;
+        float walkExtentLocal = Mathf.Max(0.001f, lb.size.x);
+
+        float s = 1f;
+        if (resizeGraph) s = targetWalkLength / walkExtentLocal;
+
+        // Solve for the root position so the dots' centre lands on the area centre
+        // after scaling by s about the (rotated) root: worldCentre = Pf + R*(s*localCentre).
+        Vector3 centreTarget = area != null ? area.Center : graphRoot.position;
+        Quaternion R = graphRoot.rotation;
+        Vector3 targetPos = centreTarget - R * (s * localCentre);
+
+        graphRoot.DOKill();
+        Sequence resize = DOTween.Sequence();
+        resize.Join(graphRoot.DOScale(Vector3.one * s, scaleTweenDuration).SetEase(Ease.OutCubic));
+        resize.Join(graphRoot.DOMove(targetPos, scaleTweenDuration).SetEase(Ease.OutCubic));
+        resize.OnComplete(ConfigureSampler);
+    }
+
+    // Point the sampler at the graph's final geometry. Reads the segment length from
+    // the actual (scaled) dot spacing, so the value mapping is correct at any scale.
+    private void ConfigureSampler()
+    {
+        if (pathSampler == null || graphData == null || _spawnedDots.Count == 0) return;
+
+        Vector3 start = _spawnedDots[0].transform.position;
+        Vector3 walkDir = area != null ? area.Forward : graphRoot.right;
+        float segment = _spawnedDots.Count > 1
+            ? Vector3.Distance(_spawnedDots[0].transform.position,
+                               _spawnedDots[1].transform.position)
+            : settings.spacing;
+        pathSampler.Configure(start, walkDir, segment, graphData.values);
     }
 }
