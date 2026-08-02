@@ -1040,10 +1040,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ConditionManager
   conditions:
   - {fileID: 1230336072}
-  - {fileID: 1227098294}
-  - {fileID: 1565056392}
-  - {fileID: 2016803390}
-  - {fileID: 297737333}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
   current: 0
 --- !u!4 &407123597
 Transform:
@@ -2831,7 +2831,7 @@ MonoBehaviour:
   audioSource: {fileID: 0}
   clip: {fileID: 8300000, guid: c831eff0d29cf13408a2cfdf3a1e1061, type: 3}
   mode: 2
-  respondToValue: 1
+  respondToValue: 0
   minPitch: 0.8
   maxPitch: 1.5
   minPulsesPerSecond: 1

@@ -12,7 +12,7 @@ We progress one milestone at a time. Check items off as we go.
 - [x] **M1. Confirm clean compile.** Unity console clean — zero errors/warnings after the refactor.
 - [x] **M2. Re-wire SessionController.** Assigned `graphManager`, `conditionManager`, and `player` (-> DesktopWalker for now; repoint to XR head at M9). Verified non-null in saved scene.
 - [x] **M3. Re-wire ConditionManager.** `conditions` list populated with all 5 (Control, Abstract, Representative, SemanticAudio, SemanticVisual) in id order; null entry removed. All ids unique 0-4.
-- [ ] **M4. Confirm all 5 conditions exist & are configured.** Control, Abstract, Representative, SemanticAudio, SemanticVisual — each with the right density prefab (sphere vs spark), audio clip, and `respondToValue` flag. Resolve the "MismatchNonRep" naming vs the 5-condition enum.
+- [x] **M4. Confirm all 5 conditions exist & are configured.** Verified against modified_plan (authoritative): id0 Control (none); id1 Abstract (sphere+beep, reacts); id2 Representative (spark+electric, reacts); id3 MismatchStatic (sphere+electric, STATIC — audio does not react to walk); id4 MismatchNonRep (spark+beep, reacts). Fixed id3 `respondToValue`->false. Note: code enum names for id3/id4 (SemanticAudio/SemanticVisual) are stale vs the plan — cosmetic only.
 
 ## Phase B — End-to-end validation (desktop)
 - [ ] **M5. Full desktop run-through.** Drive a session via debug keys: Walk -> Distractor -> Retrace -> Recall across all trials.
