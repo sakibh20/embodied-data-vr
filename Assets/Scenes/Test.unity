@@ -978,9 +978,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e4ceb91e1dad9db4dbdae29f972a759c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SessionController
-  graphManager: {fileID: 0}
-  conditionManager: {fileID: 0}
-  player: {fileID: 0}
+  graphManager: {fileID: 1738052344}
+  conditionManager: {fileID: 407123596}
+  player: {fileID: 758134062}
   datasetPool:
   - {fileID: 11400000, guid: 0b11a8862899faa449b8b77d96b3512f, type: 2}
   - {fileID: 11400000, guid: 6e43ecf4f1f293648b44a53080c8d47e, type: 2}

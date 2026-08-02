@@ -8,9 +8,9 @@ list, a possibly-missing 5th condition, and the whole refactor is uncommitted.
 We progress one milestone at a time. Check items off as we go.
 
 ## Phase A — Stabilize & get it running (software)
-- [ ] **M0. Secure the work.** Remove stale `.git/index.lock`; commit the current refactor so nothing is lost.
-- [ ] **M1. Confirm clean compile.** No errors/warnings in the Unity console after the refactor.
-- [ ] **M2. Re-wire SessionController.** Assign `graphManager`, `conditionManager`, `player` (currently null).
+- [x] **M0. Secure the work.** Stale `.git/index.lock` cleared; refactor committed (`002f3d2` on `develop`, 52 files). Working tree clean.
+- [x] **M1. Confirm clean compile.** Unity console clean — zero errors/warnings after the refactor.
+- [x] **M2. Re-wire SessionController.** Assigned `graphManager`, `conditionManager`, and `player` (-> DesktopWalker for now; repoint to XR head at M9). Verified non-null in saved scene.
 - [ ] **M3. Re-wire ConditionManager.** Populate the `conditions` list with all conditions; remove the null entry.
 - [ ] **M4. Confirm all 5 conditions exist & are configured.** Control, Abstract, Representative, SemanticAudio, SemanticVisual — each with the right density prefab (sphere vs spark), audio clip, and `respondToValue` flag. Resolve the "MismatchNonRep" naming vs the 5-condition enum.
 
