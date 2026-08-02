@@ -11,7 +11,7 @@ We progress one milestone at a time. Check items off as we go.
 - [x] **M0. Secure the work.** Stale `.git/index.lock` cleared; refactor committed (`002f3d2` on `develop`, 52 files). Working tree clean.
 - [x] **M1. Confirm clean compile.** Unity console clean — zero errors/warnings after the refactor.
 - [x] **M2. Re-wire SessionController.** Assigned `graphManager`, `conditionManager`, and `player` (-> DesktopWalker for now; repoint to XR head at M9). Verified non-null in saved scene.
-- [ ] **M3. Re-wire ConditionManager.** Populate the `conditions` list with all conditions; remove the null entry.
+- [x] **M3. Re-wire ConditionManager.** `conditions` list populated with all 5 (Control, Abstract, Representative, SemanticAudio, SemanticVisual) in id order; null entry removed. All ids unique 0-4.
 - [ ] **M4. Confirm all 5 conditions exist & are configured.** Control, Abstract, Representative, SemanticAudio, SemanticVisual — each with the right density prefab (sphere vs spark), audio clip, and `respondToValue` flag. Resolve the "MismatchNonRep" naming vs the 5-condition enum.
 
 ## Phase B — End-to-end validation (desktop)

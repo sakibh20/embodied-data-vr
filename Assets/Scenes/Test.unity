@@ -1040,7 +1040,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ConditionManager
   conditions:
   - {fileID: 1230336072}
-  - {fileID: 0}
+  - {fileID: 1227098294}
+  - {fileID: 1565056392}
+  - {fileID: 2016803390}
+  - {fileID: 297737333}
   current: 0
 --- !u!4 &407123597
 Transform:
