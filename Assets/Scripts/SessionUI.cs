@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem.UI;
 using UnityEngine.UI;
+using UnityEngine.XR.Interaction.Toolkit.UI;   // XRUIInputModule, TrackedDeviceGraphicRaycaster
 
 /// <summary>
 /// Self-building in-VR UI for the study. Constructs a world-space canvas (a single
@@ -155,8 +156,11 @@ public class SessionUI : MonoBehaviour
 
     private void BuildUI()
     {
+        // GraphicRaycaster serves desktop mouse; TrackedDeviceGraphicRaycaster lets an
+        // XR controller ray (real or simulator) hit the buttons.
         var canvasGo = new GameObject("SessionCanvas",
-            typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+            typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler),
+            typeof(GraphicRaycaster), typeof(TrackedDeviceGraphicRaycaster));
 
         var canvas = canvasGo.GetComponent<Canvas>();
         canvas.renderMode = RenderMode.WorldSpace;
@@ -261,6 +265,8 @@ public class SessionUI : MonoBehaviour
     private static void EnsureEventSystem()
     {
         if (FindAnyObjectByType<EventSystem>() != null) return;
-        new GameObject("EventSystem", typeof(EventSystem), typeof(InputSystemUIInputModule));
+        // XRUIInputModule drives BOTH the desktop mouse pointer and XR controller rays,
+        // so the same UI works in desktop, simulator, and real-headset modes.
+        new GameObject("EventSystem", typeof(EventSystem), typeof(XRUIInputModule));
     }
 }

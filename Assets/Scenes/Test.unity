@@ -1308,9 +1308,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a7776dd791faed44ab86a86ea3e15a09, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SessionUI
-  session: {fileID: 0}
+  session: {fileID: 340592380}
   targetCamera: {fileID: 0}
-  audioMode: {fileID: 0}
+  audioMode: {fileID: 407123598}
   localOffset: {x: 0, y: 0.15, z: 2}
   canvasScale: 0.0025
 --- !u!4 &677478254
@@ -1688,9 +1688,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 38fe77788ce83124d9ca18ea932ce622, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ExperimentController
-  conditionManager: {fileID: 0}
-  audioModeSelector: {fileID: 0}
-  graphManager: {fileID: 0}
+  conditionManager: {fileID: 407123596}
+  audioModeSelector: {fileID: 407123598}
+  graphManager: {fileID: 1738052344}
   keyboardShortcuts: 0
 --- !u!4 &1018251982
 Transform:
@@ -2479,7 +2479,7 @@ MonoBehaviour:
   pathSampler: {fileID: 759068180}
   graphData: {fileID: 11400000, guid: d24e6b463ceabd141bd32a0060971de9, type: 2}
   settings: {fileID: 11400000, guid: 6ce9427ee757f406baad8a3c299dc75a, type: 2}
-  area: {fileID: 0}
+  area: {fileID: 300438503}
   resizeGraph: 1
   targetWalkLength: 3
   scaleTweenDuration: 0.6
