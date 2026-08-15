@@ -157,7 +157,7 @@ public class SessionController : MonoBehaviour
             datasetName = spec.dataset != null ? spec.dataset.name : "(none)",
             trialInCondition = spec.trialInCondition,
             distractorStartNumber = UnityEngine.Random.Range(300, 999),
-            questions = BuildQuestions(spec.dataset)
+            questions = BuildQuestions(spec.dataset, spec.orderIndex)
         };
 
         // Set up and show the graph for this trial's dataset and condition.
@@ -243,41 +243,71 @@ public class SessionController : MonoBehaviour
     // Recall questions
     // =====================================================================
 
-    private List<RecallQuestion> BuildQuestions(GraphData data)
+    private List<RecallQuestion> BuildQuestions(GraphData data, int orderIndex)
     {
         var qs = new List<RecallQuestion>();
         if (data == null || data.values == null || data.values.Count == 0) return qs;
 
         float max = float.MinValue, min = float.MaxValue;
         foreach (var v in data.values) { if (v > max) max = v; if (v < min) min = v; }
-        float first = data.values[0];
         float last = data.values[data.values.Count - 1];
+        float range = max - min;
 
-        qs.Add(MakeNumericQuestion("What was the highest value you encountered?", max, data.unit, 0));
-        qs.Add(MakeNumericQuestion("What was the lowest value you encountered?", min, data.unit, 1));
-        qs.Add(MakeNumericQuestion("What was the value at the end of the walk?", last, data.unit, 2));
+        qs.Add(MakeNumericQuestion("What was the highest value you encountered?", max, data.unit, range, orderIndex, 0));
+        qs.Add(MakeNumericQuestion("What was the lowest value you encountered?", min, data.unit, range, orderIndex, 1));
+        qs.Add(MakeNumericQuestion("What was the value at the end of the walk?", last, data.unit, range, orderIndex, 2));
         qs.Add(MakeNumericQuestion("What was the difference between the highest and lowest points?",
-                                   max - min, data.unit, 3));
+                                   range, data.unit, range, orderIndex, 3));
         return qs;
     }
 
-    // Build a 4-option multiple-choice question around a numeric answer. The correct
-    // answer sits at 'correctSlot' (rotated per question for positional balance); the
-    // other slots get fixed-offset distractors in order.
-    private RecallQuestion MakeNumericQuestion(string prompt, float answer, string unit, int correctSlot)
+    // Build a 4-option multiple-choice question around a numeric answer.
+    // The correct answer's slot is randomized with a seed derived from participant +
+    // trial order + question index, so placement is unpredictable to the participant
+    // yet fully reproducible for analysis. Distractors are offset by multiples of a
+    // step scaled to the dataset's value range, and are guaranteed distinct from each
+    // other and the answer (by display value) and non-negative.
+    private RecallQuestion MakeNumericQuestion(
+        string prompt, float answer, string unit, float range, int orderIndex, int qIndex)
     {
-        float[] distractors = { answer + 3f, answer - 4f, answer + 6f };
-        int slot = ((correctSlot % 4) + 4) % 4;
+        float step = Mathf.Max(1f, Mathf.Round(range * 0.15f));
+
+        // Collect 3 distinct, non-negative distractors, comparing on the displayed value.
+        var distractors = new List<float>();
+        var usedDisplays = new HashSet<string> { Display(answer) };
+        int[] mults = { 1, -1, 2, -2, 3, -3, 4, -4 };
+        foreach (int m in mults)
+        {
+            if (distractors.Count == 3) break;
+            float v = answer + m * step;
+            if (v < 0f) continue;
+            string disp = Display(v);
+            if (usedDisplays.Add(disp)) distractors.Add(v);
+        }
+        // Safety net for tiny ranges: keep stepping up until we have 3.
+        int extra = 5;
+        while (distractors.Count < 3)
+        {
+            float v = answer + extra * step;
+            if (usedDisplays.Add(Display(v))) distractors.Add(v);
+            extra++;
+        }
+
+        // Reproducible per participant/trial/question RNG for answer placement.
+        int seed = participantId * 73856093 ^ (orderIndex + 1) * 19349663 ^ (qIndex + 1) * 83492791;
+        var rng = new System.Random(seed);
+        int slot = rng.Next(4);
 
         string[] options = new string[4];
         int di = 0;
         for (int i = 0; i < 4; i++)
-        {
-            float val = (i == slot) ? answer : distractors[di++];
-            options[i] = $"{Mathf.Max(0f, val):0.#} {unit}";
-        }
+            options[i] = (i == slot) ? $"{Display(answer)} {unit}" : $"{Display(distractors[di++])} {unit}";
+
         return new RecallQuestion { prompt = prompt, options = options, correctIndex = slot };
     }
+
+    // Displayed numeric token for an option value (matches option formatting).
+    private static string Display(float v) => Mathf.Max(0f, v).ToString("0.#");
 
     // =====================================================================
     // Update: retrace capture + debug keys
