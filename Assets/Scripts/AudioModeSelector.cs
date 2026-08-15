@@ -17,6 +17,9 @@ public class AudioModeSelector : MonoBehaviour
 
     private void Start() => Apply();
 
+    /// <summary>Current session-wide audio mode.</summary>
+    public CueAudioController.AudioMode Mode => mode;
+
     public void SetMode(CueAudioController.AudioMode newMode)
     {
         mode = newMode;

@@ -17,6 +17,8 @@ public class SessionUI : MonoBehaviour
 {
     [SerializeField] private SessionController session;
     [SerializeField] private Camera targetCamera;
+    [Tooltip("Session-wide audio cue mode selector, shown on the Idle screen. Auto-found if empty.")]
+    [SerializeField] private AudioModeSelector audioMode;
 
     [Header("Placement (head-locked)")]
     [SerializeField] private Vector3 localOffset = new Vector3(0f, 0.15f, 2f);
@@ -30,6 +32,7 @@ public class SessionUI : MonoBehaviour
     private void Awake()
     {
         if (session == null) session = FindAnyObjectByType<SessionController>();
+        if (audioMode == null) audioMode = FindAnyObjectByType<AudioModeSelector>();
         if (targetCamera == null)
         {
             var walker = FindAnyObjectByType<DesktopWalker>();
@@ -70,7 +73,20 @@ public class SessionUI : MonoBehaviour
         {
             case SessionPhase.Idle:
                 _title.text = "Data Physicalisation Study";
-                _body.text = "Ready to begin.";
+                if (audioMode != null)
+                {
+                    _body.text = $"Audio cue mode: <b>{ModeLabel(audioMode.Mode)}</b>\nChoose a mode, then start.";
+                    AddButton(Tick(audioMode.Mode, CueAudioController.AudioMode.PitchOnly) + "Audio: Pitch only",
+                              () => { audioMode.SetPitchOnly(); Render(SessionPhase.Idle); });
+                    AddButton(Tick(audioMode.Mode, CueAudioController.AudioMode.TempoOnly) + "Audio: Tempo only",
+                              () => { audioMode.SetTempoOnly(); Render(SessionPhase.Idle); });
+                    AddButton(Tick(audioMode.Mode, CueAudioController.AudioMode.Both) + "Audio: Both",
+                              () => { audioMode.SetBoth(); Render(SessionPhase.Idle); });
+                }
+                else
+                {
+                    _body.text = "Ready to begin.";
+                }
                 AddButton("Start Session", () => session.StartSession());
                 break;
 
@@ -103,6 +119,20 @@ public class SessionUI : MonoBehaviour
                 break;
         }
     }
+
+    private static string ModeLabel(CueAudioController.AudioMode m)
+    {
+        switch (m)
+        {
+            case CueAudioController.AudioMode.PitchOnly: return "Pitch only";
+            case CueAudioController.AudioMode.TempoOnly: return "Tempo only";
+            default: return "Both";
+        }
+    }
+
+    // Leading check mark on the currently-selected mode button.
+    private static string Tick(CueAudioController.AudioMode current, CueAudioController.AudioMode option)
+        => current == option ? "✓ " : "";
 
     private void RenderRecall(string trialTag)
     {
