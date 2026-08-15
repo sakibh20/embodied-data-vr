@@ -59,12 +59,27 @@ public class SessionController : MonoBehaviour
     {
         if (graphManager == null) graphManager = FindAnyObjectByType<GraphManager>();
         if (conditionManager == null) conditionManager = FindAnyObjectByType<ConditionManager>();
-        if (player == null)
-        {
-            var walker = FindAnyObjectByType<DesktopWalker>();
-            player = walker != null ? walker.transform
-                   : (Camera.main != null ? Camera.main.transform : null);
-        }
+        player = ResolvePlayerHead();
+    }
+
+    // Resolve the transform whose position is captured during retrace.
+    // In VR (an XR device is present/active) this is the head camera — the XR rig's
+    // Main Camera is tagged MainCamera, so Camera.main returns it. On desktop (no
+    // device) we fall back to the serialized ref / DesktopWalker. This means the same
+    // scene works in both modes with no manual re-wiring of the 'player' field.
+    private Transform ResolvePlayerHead()
+    {
+        if (UnityEngine.XR.XRSettings.isDeviceActive && Camera.main != null)
+            return Camera.main.transform;                     // VR head
+
+        if (player != null && player.gameObject.activeInHierarchy)
+            return player;                                    // explicit serialized ref (desktop)
+
+        var walker = FindAnyObjectByType<DesktopWalker>();
+        if (walker != null) return walker.transform;
+
+        return Camera.main != null ? Camera.main.transform
+             : (FindAnyObjectByType<Camera>() is Camera c ? c.transform : null);
     }
 
     // ---- public read state for the UI ----

@@ -21,7 +21,9 @@ We progress one milestone at a time. Check items off as we go.
 - [x] **M8. Graph/grid/tag visual pass.** Rendered Dataset_01 in play mode and inspected via screenshots. Grid spacing matches data points exactly (GridGenerator draws one cross-line per point at `i*spacing` using the same shared GraphSettings asset as the dots; verified 20 dots + 21 grid children + baseline). Value tags render at constant brightness (TMP Distance Field = unlit) and are readable up close. RECOMMENDATION (not blocking): tags are small and low-contrast (dark text on gray floor) — bump font size / set a high-contrast color + outline for headset legibility. (2026-08-15)
 
 ## Phase C — VR bring-up
-- [ ] **M9. Headset test.** Run in Quest 2 / Varjo; confirm room-scale walk maps to PathSampler values correctly.
+- [ ] **M9. Headset test.** Run in Quest 2 / Varjo; confirm room-scale walk maps to PathSampler values correctly. **(needs hardware)**
+  - PREP DONE (2026-08-15): SessionController now auto-resolves the retrace `player` — uses the XR head camera when an XR device is active (`XRSettings.isDeviceActive`; the rig's Main Camera is tagged MainCamera so `Camera.main` returns it), else falls back to the serialized ref / DesktopWalker. Verified in play mode: desktop resolves to the DesktopWalker `Camera` as before. No manual re-wiring of the field needed to switch modes.
+  - TODO on hardware: the scene has TWO inactive XR Origins (`XR Origin (XR Rig)` and `XR Origin (VR)`) — enable exactly ONE and disable the desktop `Camera`/DesktopWalker (or leave it; it's ignored when a device is active). Consolidate/delete the duplicate rig to avoid confusion.
 - [ ] **M10. Cue verification in VR.** Density field, audio pitch/tempo, and per-condition assets behave correctly while walking.
 - [ ] **M11. Audio mode selector.** Pitch-only / tempo-only / both selectable from UI and applied session-wide.
 - [ ] **M12. Session UI in VR.** Distractor task, retrace prompt, and recall questions usable in-headset.
