@@ -265,7 +265,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CueAudioController
   audioSource: {fileID: 0}
   clip: {fileID: 8300000, guid: cab6e98116fc0da4b9d4154c0dbfbbe0, type: 3}
-  mode: 2
+  mode: 0
   respondToValue: 1
   minPitch: 0.8
   maxPitch: 1.5
@@ -1040,10 +1040,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ConditionManager
   conditions:
   - {fileID: 1230336072}
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
+  - {fileID: 1227098293}
+  - {fileID: 1565056391}
+  - {fileID: 2016803389}
+  - {fileID: 297737332}
   current: 0
 --- !u!4 &407123597
 Transform:
@@ -1072,7 +1072,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8ac00f283f4c7f84cbc82bc321a3c262, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AudioModeSelector
-  mode: 2
+  mode: 0
   controllers: []
 --- !u!114 &407123599
 MonoBehaviour:
@@ -1919,7 +1919,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CueAudioController
   audioSource: {fileID: 0}
   clip: {fileID: 8300000, guid: cab6e98116fc0da4b9d4154c0dbfbbe0, type: 3}
-  mode: 2
+  mode: 0
   respondToValue: 1
   minPitch: 0.8
   maxPitch: 1.5
@@ -2289,7 +2289,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CueAudioController
   audioSource: {fileID: 0}
   clip: {fileID: 8300000, guid: c831eff0d29cf13408a2cfdf3a1e1061, type: 3}
-  mode: 2
+  mode: 0
   respondToValue: 1
   minPitch: 0.8
   maxPitch: 1.5
@@ -2830,7 +2830,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CueAudioController
   audioSource: {fileID: 0}
   clip: {fileID: 8300000, guid: c831eff0d29cf13408a2cfdf3a1e1061, type: 3}
-  mode: 2
+  mode: 0
   respondToValue: 0
   minPitch: 0.8
   maxPitch: 1.5
