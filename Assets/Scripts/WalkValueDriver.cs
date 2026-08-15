@@ -24,6 +24,28 @@ public class WalkValueDriver : MonoBehaviour
 
     public void SetActive(bool value) => active = value;
 
+    private void Awake()
+    {
+        player = ResolvePlayerHead();
+    }
+
+    // Mirror SessionController: use the XR head camera when an XR device is active,
+    // otherwise the serialized ref / DesktopWalker. Lets the same scene drive the
+    // walk value in VR (real or simulator) and on desktop with no manual re-wiring.
+    private Transform ResolvePlayerHead()
+    {
+        if (UnityEngine.XR.XRSettings.isDeviceActive && Camera.main != null)
+            return Camera.main.transform;
+
+        if (player != null && player.gameObject.activeInHierarchy)
+            return player;
+
+        var walker = FindAnyObjectByType<DesktopWalker>();
+        if (walker != null) return walker.transform;
+
+        return Camera.main != null ? Camera.main.transform : player;
+    }
+
     private void Update()
     {
         if (!active || player == null || path == null || !path.IsReady) return;
