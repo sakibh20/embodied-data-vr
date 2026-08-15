@@ -19,7 +19,7 @@ MonoBehaviour:
     width: 1918
     height: 980
   m_ShowMode: 4
-  m_Title: Hierarchy
+  m_Title: Console
   m_RootView: {fileID: 10}
   m_MinSize: {x: 875, y: 300}
   m_MaxSize: {x: 10000, y: 10000}
@@ -74,7 +74,7 @@ MonoBehaviour:
   m_MinSize: {x: 200, y: 56}
   m_MaxSize: {x: 16192, y: 8096}
   vertical: 0
-  controlID: 81
+  controlID: 113
   draggingID: 0
 --- !u!114 &4
 MonoBehaviour:
@@ -721,8 +721,9 @@ MonoBehaviour:
       m_LastClickedID:
         m_Data: 0
       m_ExpandedIDs:
+      - m_Data: -6062
+      - m_Data: -4270
       - m_Data: -1302
-      - m_Data: 51774
       m_RenameOverlay:
         m_UserAcceptedRename: 0
         m_Name: 
@@ -1624,10 +1625,11 @@ MonoBehaviour:
       m_Icon: {fileID: 0}
       m_ResourceFile: 
   m_AssetTreeState:
-    scrollPos: {x: 0, y: 611}
-    m_SelectedIDs: []
+    scrollPos: {x: 0, y: 643}
+    m_SelectedIDs:
+    - m_Data: 51224
     m_LastClickedID:
-      m_Data: 0
+      m_Data: 51224
     m_ExpandedIDs:
     - m_Data: 0
     - m_Data: 54120
@@ -1669,8 +1671,9 @@ MonoBehaviour:
       m_Icon: {fileID: 0}
       m_ResourceFile: 
   m_ListAreaState:
-    m_SelectedInstanceIDs: []
-    m_LastClickedInstanceID: 0
+    m_SelectedInstanceIDs:
+    - m_Data: 51224
+    m_LastClickedInstanceID: 51224
     m_HadKeyboardFocusLastEvent: 1
     m_ExpandedInstanceIDs: []
     m_RenameOverlay:

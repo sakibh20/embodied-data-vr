@@ -15,9 +15,9 @@ We progress one milestone at a time. Check items off as we go.
 - [x] **M4. Confirm all 5 conditions exist & are configured.** Verified against modified_plan (authoritative): id0 Control (none); id1 Abstract (sphere+beep, reacts); id2 Representative (spark+electric, reacts); id3 MismatchStatic (sphere+electric, STATIC — audio does not react to walk); id4 MismatchNonRep (spark+beep, reacts). Fixed id3 `respondToValue`->false. Note: code enum names for id3/id4 (SemanticAudio/SemanticVisual) are stale vs the plan — cosmetic only.
 
 ## Phase B — End-to-end validation (desktop)
-- [ ] **M5. Full desktop run-through.** Drive a session via debug keys: Walk -> Distractor -> Retrace -> Recall across all trials.
-- [ ] **M6. Verify data logging.** Confirm the per-participant JSON writes with correct retrace path, recall answers, and scores.
-- [ ] **M7. Validate recall questions.** Check the generated multiple-choice values/distractors are sensible and correctly scored.
+- [x] **M5. Full desktop run-through.** Ran a full session in play mode (5 trials, one per condition) through Walk -> Distractor -> Retrace -> Recall to Complete, zero runtime errors. Verified scene wiring at runtime: SessionController has all refs + 6 datasets + debugKeys on; ExperimentController shortcuts off (no key clash). (2026-08-15)
+- [x] **M6. Verify data logging.** Confirmed per-participant JSON at `<persistentData>/StudyData/`. Well-formed: 5 trials in counterbalanced order, each with walk/distractor/retrace durations, randomized distractor start (300-999), retrace path (15 samples @ 0.1s w/ real x/z), and 4 recall questions with recorded answers + verifiable scores. (2026-08-15)
+- [ ] **M7. Validate recall questions.** Check the generated multiple-choice values/distractors are sensible and correctly scored. NOTE (found during M6): distractors use fixed offsets (+3/-4/+6) that don't scale with data magnitude and can collide/clamp to 0 for small answers (e.g. the max-min "difference" question). Review MakeNumericQuestion in SessionController.
 - [ ] **M8. Graph/grid/tag visual pass.** Value tags legible at constant brightness; grid spacing matches data points.
 
 ## Phase C — VR bring-up
