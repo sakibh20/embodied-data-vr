@@ -1,18 +1,28 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
 /// <summary>
-/// Orchestrates a full study session: builds a counterbalanced list of trials
-/// (condition x dataset), then drives each trial through the phases
-/// Walk -> Distractor -> Retrace -> Recall, and writes a JSON log per participant.
+/// Orchestrates a full study session: a counterbalanced list of trials (condition x
+/// dataset), each driven through the phases Walk -> Distractor -> Retrace -> Recall.
+/// Data is written as CSV, matching the schema in the sources-folder data notes doc --
+/// trials.csv (one row per trial), value_questions.csv (one row per recall question),
+/// and retracing_log.csv (one row per retrace sample) -- all appended into a shared,
+/// growing file per study rather than one file per participant, and written
+/// incrementally (retrace rows at end of Retrace, a question row the moment it's
+/// answered, a trial row the moment its last recall question is answered) so a crash
+/// mid-session loses at most the current in-progress trial, not the whole participant.
 ///
 /// The in-VR UI (built separately) calls the public API -- StartSession, EndWalk,
 /// EndDistractor, EndRetrace, AnswerCurrentQuestion/AnswerCurrentQuestionText -- and
 /// reads Phase / the current question / the distractor number to drive its panels.
 /// Optional debug keys let the whole flow be exercised on desktop without the UI.
+/// The static ClearAllStudyData/StudyDataSummary/HasStudyData helpers are for clearing
+/// out test/pilot CSV data -- see the "Tools/Study Data" Unity menu (Editor/StudyDataMenu.cs),
+/// which is the intended way to use them.
 /// </summary>
 public class SessionController : MonoBehaviour
 {
@@ -37,7 +47,6 @@ public class SessionController : MonoBehaviour
 
     // ---- runtime state ----
     private readonly List<TrialSpec> _trials = new List<TrialSpec>();
-    private SessionLog _log;
     private TrialResult _result;
     private int _index = -1;
 
@@ -95,10 +104,13 @@ private void Awake()
     public int QuestionNumber => _questionIndex + 1;
     public int QuestionCount => _result?.questions.Count ?? 0;
 
+    private string ParticipantLabel => $"p{participantId:00}";
+
     // =====================================================================
     // Session lifecycle
     // =====================================================================
 
+    /// <summary>Begins the session: builds the counterbalanced trial list and starts the first trial.</summary>
     [ContextMenu("Start Session")]
     public void StartSession()
     {
@@ -114,12 +126,6 @@ private void Awake()
         }
 
         BuildTrials();
-        _log = new SessionLog
-        {
-            participantId = participantId,
-            trialsPerCondition = trialsPerCondition,
-            startedUtc = DateTime.UtcNow.ToString("o")
-        };
         _index = -1;
         Debug.Log($"[Session] Participant {participantId}: {_trials.Count} trials.");
         NextTrial();
@@ -173,6 +179,7 @@ private void Awake()
             condition = spec.condition.ToString(),
             datasetName = spec.dataset != null ? spec.dataset.name : "(none)",
             trialInCondition = spec.trialInCondition,
+            startedUtc = DateTime.UtcNow.ToString("o"),
             distractorStartNumber = UnityEngine.Random.Range(300, 999),
             questions = BuildQuestions(spec.dataset, spec.orderIndex)
         };
@@ -188,10 +195,7 @@ private void Awake()
 
     private void FinishSession()
     {
-        _phase = SessionPhase.Complete;
-        _log.finishedUtc = DateTime.UtcNow.ToString("o");
-        WriteLog();
-        PhaseChanged?.Invoke(_phase);
+        SetPhase(SessionPhase.Complete);
         Debug.Log("[Session] Complete.");
     }
 
@@ -223,6 +227,7 @@ private void Awake()
     {
         if (_phase != SessionPhase.Retrace) return;
         _result.retraceSeconds = Time.time - _phaseStart;
+        WriteRetraceCsv(_result);
         _questionIndex = 0;
         SetPhase(SessionPhase.Recall);
     }
@@ -233,6 +238,7 @@ private void Awake()
         var q = CurrentQuestion;
         if (q == null) return;
         q.answeredIndex = optionIndex;
+        WriteQuestionCsv(q);
         AdvanceRecall();
     }
 
@@ -242,6 +248,7 @@ private void Awake()
         var q = CurrentQuestion;
         if (q == null) return;
         q.typedAnswer = text ?? "";
+        WriteQuestionCsv(q);
         AdvanceRecall();
     }
 
@@ -253,7 +260,8 @@ private void Awake()
         _questionIndex++;
         if (_questionIndex >= _result.questions.Count)
         {
-            _log.trials.Add(_result);
+            _result.finishedUtc = DateTime.UtcNow.ToString("o");
+            WriteTrialCsv(_result);
             NextTrial();
         }
         else
@@ -267,7 +275,7 @@ private void Awake()
         _phase = phase;
         _phaseStart = Time.time;
         PhaseChanged?.Invoke(phase);
-        Debug.Log($"[Session] Trial {TrialNumber}/{TotalTrials} -> {phase}");
+        Debug.Log($"[Session] {(phase == SessionPhase.Idle || phase == SessionPhase.Complete ? "" : $"Trial {TrialNumber}/{TotalTrials} -> ")}{phase}");
     }
 
     // =====================================================================
@@ -284,24 +292,24 @@ private void Awake()
         float last = data.values[data.values.Count - 1];
         float range = max - min;
 
-        qs.Add(MakeNumericQuestion("What was the highest value you encountered?", max, data.unit, range, orderIndex, 0));
-        qs.Add(MakeNumericQuestion("What was the lowest value you encountered?", min, data.unit, range, orderIndex, 1));
-        qs.Add(MakeNumericQuestion("What was the value at the end of the walk?", last, data.unit, range, orderIndex, 2));
-        qs.Add(MakeNumericQuestion("What was the difference between the highest and lowest points?",
+        qs.Add(MakeNumericQuestion("max_value", "What was the highest value you encountered?", max, data.unit, range, orderIndex, 0));
+        qs.Add(MakeNumericQuestion("min_value", "What was the lowest value you encountered?", min, data.unit, range, orderIndex, 1));
+        qs.Add(MakeNumericQuestion("end_value", "What was the value at the end of the walk?", last, data.unit, range, orderIndex, 2));
+        qs.Add(MakeNumericQuestion("range_value", "What was the difference between the highest and lowest points?",
                                    range, data.unit, range, orderIndex, 3));
         return qs;
     }
 
     // Build a recall question around a numeric answer. Always fills both a 4-option
-    // multiple-choice representation (options/correctIndex) and the raw answerValue/unit,
-    // so RunSettings.recallInputMode can switch how it's rendered without touching this
-    // logic. The correct answer's slot is randomized with a seed derived from participant +
-    // trial order + question index, so placement is unpredictable to the participant
-    // yet fully reproducible for analysis. Distractors are offset by multiples of a
-    // step scaled to the dataset's value range, and are guaranteed distinct from each
-    // other and the answer (by display value) and non-negative.
+    // multiple-choice representation (options/optionValues/correctIndex) and the raw
+    // answerValue/unit, so RunSettings.recallInputMode can switch how it's rendered
+    // without touching this logic. The correct answer's slot is randomized with a seed
+    // derived from participant + trial order + question index, so placement is
+    // unpredictable to the participant yet fully reproducible for analysis. Distractors
+    // are offset by multiples of a step scaled to the dataset's value range, and are
+    // guaranteed distinct from each other and the answer (by display value) and non-negative.
     private RecallQuestion MakeNumericQuestion(
-        string prompt, float answer, string unit, float range, int orderIndex, int qIndex)
+        string questionType, string prompt, float answer, string unit, float range, int orderIndex, int qIndex)
     {
         float step = Mathf.Max(1f, Mathf.Round(range * 0.15f));
 
@@ -332,14 +340,21 @@ private void Awake()
         int slot = rng.Next(4);
 
         string[] options = new string[4];
+        float[] optionValues = new float[4];
         int di = 0;
         for (int i = 0; i < 4; i++)
-            options[i] = (i == slot) ? $"{Display(answer)} {unit}" : $"{Display(distractors[di++])} {unit}";
+        {
+            float v = (i == slot) ? answer : distractors[di++];
+            optionValues[i] = v;
+            options[i] = $"{Display(v)} {unit}";
+        }
 
         return new RecallQuestion
         {
+            questionType = questionType,
             prompt = prompt,
             options = options,
+            optionValues = optionValues,
             correctIndex = slot,
             answerValue = answer,
             unit = unit
@@ -366,8 +381,10 @@ private void Update()
                 Vector3 p = head.position;
                 _result.retracePath.Add(new RetraceSample
                 {
+                    timestampUtc = DateTime.UtcNow.ToString("o"),
                     t = Time.time - _phaseStart,
                     x = p.x,
+                    y = p.y,
                     z = p.z
                 });
             }
@@ -403,23 +420,173 @@ private void Update()
     }
 
     // =====================================================================
-    // Logging
+    // CSV logging -- schema follows the sources-folder data notes doc. Files are
+    // shared/growing across the whole study (not one per participant): a header row
+    // is written once, then every session appends more rows. Written incrementally
+    // (not batched to session end) so a crash loses at most the current trial.
     // =====================================================================
 
-    private void WriteLog()
+    private static readonly string[] TrialsHeader =
+        { "participant_id", "condition", "audio_cue", "visual_cue", "presentation_order", "trial_in_condition",
+          "dataset_id", "timestamp_start", "timestamp_end", "walk_seconds", "distractor_seconds",
+          "distractor_start_number", "retrace_seconds", "recall_score", "recall_total" };
+
+    private static readonly string[] QuestionsHeader =
+        { "participant_id", "condition", "audio_cue", "visual_cue", "presentation_order", "dataset_id",
+          "question_id", "question_type", "question_text", "correct_answer", "participant_response",
+          "is_correct", "answer_mode", "timestamp" };
+
+    private static readonly string[] RetraceHeader =
+        { "participant_id", "condition", "audio_cue", "visual_cue", "presentation_order", "dataset_id",
+          "timestamp", "t_seconds", "head_x", "head_y", "head_z" };
+
+    private void WriteTrialCsv(TrialResult r)
+    {
+        var (audio, visual) = CueLabels(r.condition);
+        AppendCsvRow("trials.csv", TrialsHeader, new[]
+        {
+            ParticipantLabel, r.condition, audio, visual, (r.orderIndex + 1).ToString(),
+            r.trialInCondition.ToString(), r.datasetName, r.startedUtc, r.finishedUtc,
+            r.walkSeconds.ToString("0.###", CultureInfo.InvariantCulture),
+            r.distractorSeconds.ToString("0.###", CultureInfo.InvariantCulture),
+            r.distractorStartNumber.ToString(),
+            r.retraceSeconds.ToString("0.###", CultureInfo.InvariantCulture),
+            r.RecallScore.ToString(), r.questions.Count.ToString()
+        });
+    }
+
+    private void WriteQuestionCsv(RecallQuestion q)
+    {
+        var (audio, visual) = CueLabels(_result.condition);
+        float? response = q.ResponseValue;
+        AppendCsvRow("value_questions.csv", QuestionsHeader, new[]
+        {
+            ParticipantLabel, _result.condition, audio, visual, (_result.orderIndex + 1).ToString(),
+            _result.datasetName, "q" + (_result.questions.IndexOf(q) + 1), q.questionType, q.prompt,
+            q.answerValue.ToString("0.###", CultureInfo.InvariantCulture),
+            response.HasValue ? response.Value.ToString("0.###", CultureInfo.InvariantCulture) : "",
+            q.IsCorrect.ToString(), q.AnswerMode, DateTime.UtcNow.ToString("o")
+        });
+    }
+
+    private void WriteRetraceCsv(TrialResult r)
+    {
+        var (audio, visual) = CueLabels(r.condition);
+        string order = (r.orderIndex + 1).ToString();
+        foreach (var s in r.retracePath)
+        {
+            AppendCsvRow("retracing_log.csv", RetraceHeader, new[]
+            {
+                ParticipantLabel, r.condition, audio, visual, order, r.datasetName,
+                s.timestampUtc, s.t.ToString("0.###", CultureInfo.InvariantCulture),
+                s.x.ToString("0.###", CultureInfo.InvariantCulture),
+                s.y.ToString("0.###", CultureInfo.InvariantCulture),
+                s.z.ToString("0.###", CultureInfo.InvariantCulture)
+            });
+        }
+    }
+
+    // audio_cue/visual_cue ("semantic"/"plain"/"none") per the modified plan's condition
+    // mapping (ROADMAP M4): Abstract = plain sphere + plain beep; Representative = semantic
+    // spark + semantic electric buzz; SemanticAudio (aka MismatchStatic) = plain sphere +
+    // semantic electric buzz; SemanticVisual (aka MismatchNonRep) = semantic spark + plain
+    // beep; Control = neither.
+    private static (string audio, string visual) CueLabels(string conditionName)
+    {
+        switch (conditionName)
+        {
+            case "Control": return ("none", "none");
+            case "Abstract": return ("plain", "plain");
+            case "Representative": return ("semantic", "semantic");
+            case "SemanticAudio": return ("semantic", "plain");
+            case "SemanticVisual": return ("plain", "semantic");
+            default: return ("unknown", "unknown");
+        }
+    }
+
+    private static void AppendCsvRow(string fileName, string[] header, string[] row)
     {
         try
         {
-            string dir = Path.Combine(Application.persistentDataPath, "StudyData");
-            Directory.CreateDirectory(dir);
-            string stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-            string file = Path.Combine(dir, $"participant_{participantId:00}_{stamp}.json");
-            File.WriteAllText(file, JsonUtility.ToJson(_log, true));
-            Debug.Log($"[Session] Log written: {file}");
+            string path = Path.Combine(StudyDataDir(), fileName);
+            bool exists = File.Exists(path);
+
+            using (var w = new StreamWriter(path, append: true))
+            {
+                if (!exists) w.WriteLine(string.Join(",", Array.ConvertAll(header, EscapeCsv)));
+                w.WriteLine(string.Join(",", Array.ConvertAll(row, EscapeCsv)));
+            }
         }
         catch (Exception e)
         {
-            Debug.LogError($"[Session] Failed to write log: {e.Message}");
+            Debug.LogError($"[Session] Failed to write {fileName}: {e.Message}");
         }
+    }
+
+    private static string EscapeCsv(string value)
+    {
+        value ??= "";
+        if (value.IndexOfAny(new[] { ',', '"', '\n', '\r' }) >= 0)
+            return "\"" + value.Replace("\"", "\"\"") + "\"";
+        return value;
+    }
+
+    public static string StudyDataDir()
+    {
+        string dir = Path.Combine(Application.persistentDataPath, "StudyData");
+        Directory.CreateDirectory(dir);
+        return dir;
+    }
+
+    // The raw CSV files SessionController writes. "demographics.csv" is included only
+    // so a settings-menu clear picks up any leftover file from before the participant
+    // demographics form was removed from the study -- nothing writes it any more.
+    private static readonly string[] StudyDataFiles =
+        { "trials.csv", "value_questions.csv", "retracing_log.csv", "demographics.csv" };
+
+    // =====================================================================
+    // Settings-menu data management -- called from the UI's Settings screen.
+    // =====================================================================
+
+    /// <summary>Human-readable listing of what's currently recorded, for a confirmation
+    /// screen before a destructive clear. Row counts are cheap here (small CSVs; this is
+    /// a menu action, not a per-frame call).</summary>
+    public static string StudyDataSummary()
+    {
+        string dir = StudyDataDir();
+        var lines = new List<string>();
+        foreach (var f in StudyDataFiles)
+        {
+            string p = Path.Combine(dir, f);
+            if (!File.Exists(p)) continue;
+            int rows = Math.Max(0, File.ReadAllLines(p).Length - 1);   // minus header
+            lines.Add($"{f}: {rows} row(s)");
+        }
+        return lines.Count > 0 ? string.Join("\n", lines) : "No study data recorded yet.";
+    }
+
+    /// <summary>True if any recorded CSV data exists (so the UI can grey out/hide "Clear" when there's nothing to clear).</summary>
+    public static bool HasStudyData()
+    {
+        string dir = StudyDataDir();
+        foreach (var f in StudyDataFiles)
+            if (File.Exists(Path.Combine(dir, f))) return true;
+        return false;
+    }
+
+    /// <summary>Permanently deletes every recorded CSV file (trials/questions/retrace, plus any
+    /// leftover demographics.csv). Intended for clearing out test/pilot runs from the settings
+    /// menu before real data collection -- irreversible, so the UI must confirm before calling this.</summary>
+    public static string ClearAllStudyData()
+    {
+        string dir = StudyDataDir();
+        int deleted = 0;
+        foreach (var f in StudyDataFiles)
+        {
+            string p = Path.Combine(dir, f);
+            if (File.Exists(p)) { File.Delete(p); deleted++; }
+        }
+        Debug.Log($"[Session] Cleared {deleted} study data file(s) from {dir}");
+        return deleted > 0 ? $"Cleared {deleted} file(s)." : "No study data found.";
     }
 }

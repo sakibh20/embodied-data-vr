@@ -96,26 +96,38 @@ you press Play in `Experiment.unity`.
 ## 4. Set the participant
 
 Before each participant, set **`SessionController.participantId`** in the Inspector
-(1, 2, 3, …). This drives both the counterbalanced order and the log filename.
-Optionally set **`trialsPerCondition`** (1 or 2).
+(1, 2, 3, …). This drives both the counterbalanced order and the `participant_id` column
+written into every CSV row (formatted as `p01`, `p02`, …). Optionally set
+**`trialsPerCondition`** (1 or 2).
 
 ---
 
 ## 5. Where the data goes
 
-On session finish, a JSON log is written to Unity's persistent data path:
+Data is written as **CSV**, incrementally (a row is appended the moment it happens, not
+batched to the end of the session — so a crash mid-session loses at most the current
+trial). All participants across the whole study share the same four growing files —
+these are NOT one-file-per-participant like the old JSON log:
 
 ```
-<persistentDataPath>/StudyData/participant_<NN>_<yyyyMMdd_HHmmss>.json
+<persistentDataPath>/StudyData/trials.csv           one row per trial
+<persistentDataPath>/StudyData/value_questions.csv  one row per recall question
+<persistentDataPath>/StudyData/retracing_log.csv    one row per retrace sample
 ```
 
 On Windows this is typically:
 ```
 C:\Users\<you>\AppData\LocalLow\DefaultCompany\Thesis\StudyData\
 ```
-(The exact folder is printed to the Console: `[Session] Log written: …`.)
 
-Copy each participant's JSON into one folder for analysis.
+Columns follow the schema in the sources-folder data notes doc
+(`AudioVisualEmbodiment_DataNotes.docx`): `participant_id, condition, audio_cue, visual_cue,
+presentation_order, dataset_id, ...` plus per-file specifics (phase durations and recall
+score in `trials.csv`; question text/correct answer/response/is_correct/answer_mode in
+`value_questions.csv`; timestamp + head_x/y/z in `retracing_log.csv`).
+
+Point the analysis script (§6) straight at the `StudyData` folder — there's nothing to
+copy or merge across participants, since everyone already appended into the same files.
 
 ---
 
@@ -123,13 +135,16 @@ Copy each participant's JSON into one folder for analysis.
 
 ```bash
 cd Analysis
-python analyze_study.py <folder_with_participant_json> --datasets datasets.json
+python analyze_study.py <path_to_StudyData_folder> --datasets datasets.json
 ```
 
-Outputs (in the same folder, or pass `--out <dir>`):
-- `trials.csv` — one row per trial: recall score & %, phase durations, retrace metrics,
-  and a retrace shape-correlation proxy (when `--datasets` is given).
-- `conditions.csv` — per-condition mean recall % + SD.
+The script reads `trials.csv` and `retracing_log.csv` straight from
+that folder (no more JSON parsing). Outputs go to `<StudyData_folder>/analysis/` by
+default (pass `--out <dir>` to change it) — deliberately a subfolder, so the script's own
+outputs never collide with Unity's raw `trials.csv` sitting next to it:
+- `analysis_trials.csv` — every raw `trials.csv` column, plus recall %, retrace path
+  length/duration/spread, and a retrace shape-correlation proxy (when `--datasets` is given).
+- `analysis_conditions.csv` — per-condition mean recall % + SD, mean retrace length.
 
 A summary is also printed to the console.
 
@@ -141,7 +156,22 @@ regenerate so the retrace proxy stays correct.
 
 ---
 
-## 7. Troubleshooting
+## 7. Clearing test data (Unity menu)
+
+This is an Editor-only action (an operator/researcher step between sessions, not
+something participants see) under the Unity menu bar: **Tools > Study Data**.
+
+- **Clear Study Data...** — shows exactly what's currently recorded (a row count per
+  CSV file) and asks for confirmation before deleting `trials.csv`, `value_questions.csv`,
+  and `retracing_log.csv` from `StudyData/` (see §5). Use this to wipe out pilot/test runs
+  before starting real data collection — **this is permanent**. Greyed out automatically
+  when there's no data to clear. Works whether or not you're in Play mode.
+- **Show Summary** — same row-count listing, without deleting anything.
+- **Open Data Folder** — reveals the `StudyData/` folder in Explorer.
+
+---
+
+## 8. Troubleshooting
 
 - **UI not clickable with the controller ray:** ensure mode B/C (XR rig active). The debug
   keys always work as a fallback.
@@ -155,6 +185,6 @@ regenerate so the retrace proxy stays correct.
 
 ---
 
-## 8. Customizing the in-session UI
+## 9. Customizing the in-session UI
 
 `SessionUI` no longer builds its canvas in code — it instantiates three prefabs under `Assets/Prefabs/UI/`: **`SessionCanvas.prefab`** (the panel: title, body, and a scrollable button/answer area — restyle colors/fonts/spacing here, it's a normal prefab), **`SessionOptionButton.prefab`** (one phase-action/MCQ-option button), and **`SessionAnswerInput.prefab`** (the text-entry recall answer box). Edit any of them directly in the Unity Editor; `SessionUI` only sets their text and click callbacks at runtime, so layout/look changes need no code changes.

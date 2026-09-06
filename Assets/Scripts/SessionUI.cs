@@ -7,12 +7,14 @@ using UnityEngine.XR.Interaction.Toolkit.UI;   // XRUIInputModule, TrackedDevice
 
 /// <summary>
 /// Head-locked in-VR UI for the study. Instantiates a SessionCanvasView prefab (the
-/// panel's whole look -- title/body/scrollable content area -- is authored in the
+/// panel's whole look — title/body/scrollable content area — is authored in the
 /// Editor, not built in code) and populates it per SessionController phase change:
 /// stacks SessionOptionButton items for phase actions / multiple-choice recall
 /// options, or a single SessionAnswerInput for free-text recall answers when
 /// RunSettings.recallInputMode is TextEntry. Works with a mouse on desktop and with
 /// an XR controller ray via TrackedDeviceGraphicRaycaster/XRUIInputModule.
+/// (Clearing test/pilot CSV data is a Unity Editor menu action, not part of this
+/// runtime UI — see Assets/Editor/StudyDataMenu.cs, "Tools/Study Data".)
 /// </summary>
 public class SessionUI : MonoBehaviour
 {
@@ -160,14 +162,14 @@ public class SessionUI : MonoBehaviour
     }
 
     // =====================================================================
-    // UI construction (from prefabs -- see Assets/Prefabs/UI)
+    // UI construction (from prefabs — see Assets/Prefabs/UI)
     // =====================================================================
 
     private void BuildCanvas()
     {
         if (canvasPrefab == null)
         {
-            Debug.LogError("[SessionUI] No canvasPrefab assigned -- nothing to show.");
+            Debug.LogError("[SessionUI] No canvasPrefab assigned — nothing to show.");
             return;
         }
 

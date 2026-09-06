@@ -1,60 +1,83 @@
 #!/usr/bin/env python3
 """
-Embodied-Data-VR — study analysis pipeline (M16).
+Embodied-Data-VR -- study analysis pipeline (M16, updated for CSV logging).
 
-Parses per-participant session logs (the JSON written by SessionController.WriteLog)
-into tidy per-trial rows and per-condition summaries.
+SessionController now writes its raw data straight to CSV -- trials.csv,
+value_questions.csv, retracing_log.csv -- as shared files that grow across the
+whole study (every participant appends rows to the same three files; there is no
+more one-JSON-per-participant). This script reads those raw CSVs and derives
+per-trial retrace metrics and per-condition summaries from them; it no longer
+reads any JSON.
 
 Usage:
-    python analyze_study.py <logs_dir> [--out <out_dir>] [--datasets datasets.json]
+    python analyze_study.py <study_data_dir> [--out <out_dir>] [--datasets datasets.json]
 
-Inputs:
-    <logs_dir>       folder containing participant_*.json files.
-    --datasets       optional JSON mapping datasetName -> [values...]. When provided,
-                     a normalized retrace-accuracy proxy is computed (see notes).
+Inputs (in <study_data_dir>, as written by SessionController):
+    trials.csv          one row per trial: participant_id, condition, audio_cue,
+                         visual_cue, presentation_order, trial_in_condition,
+                         dataset_id, timestamps, phase durations, recall_score,
+                         recall_total.
+    retracing_log.csv   one row per retrace sample (participant_id, presentation_order,
+                         t_seconds, head_x, head_y, head_z, ...) -- many rows per trial.
+    value_questions.csv one row per recall question (not required for the metrics
+                         below, since trials.csv already carries recall_score/total,
+                         but available for per-question-type breakdowns).
+    --datasets          optional JSON mapping dataset_id -> [values...]. When
+                         provided, a normalized retrace-accuracy proxy is computed
+                         (see notes).
 
-Outputs (written to --out, default alongside logs):
-    trials.csv       one row per trial (recall score, phase durations, retrace metrics).
-    conditions.csv   per-condition aggregate (means across all trials/participants).
+Outputs (written to --out, default <study_data_dir>/analysis so they never collide
+with Unity's own raw trials.csv sitting alongside them):
+    analysis_trials.csv      one row per trial: every trials.csv column plus the
+                              derived retrace metrics (and recall_pct).
+    analysis_conditions.csv  per-condition aggregate (means across all trials).
     A summary is also printed to stdout.
 
 Notes on retrace accuracy:
-    The log stores the participant's retrace path as world (x, z) samples but NOT the
-    ground-truth graph geometry, so absolute spatial accuracy cannot be recovered from
-    the log alone. This script always reports descriptive retrace metrics (path length,
-    duration, lateral/forward spread). If --datasets is supplied it additionally reports
-    a shape-correlation proxy: Pearson r between the retrace's lateral profile (resampled
-    over forward progress) and the dataset's value profile. Treat this as a rough proxy;
-    for rigorous accuracy, log the value profile or graph mapping per trial.
+    retracing_log.csv stores the participant's retrace path as world (x, y, z)
+    samples but not the ground-truth graph geometry, so absolute spatial accuracy
+    can't be recovered from the log alone. This script always reports descriptive
+    retrace metrics (path length, duration, lateral/forward spread). If --datasets
+    is supplied it additionally reports a shape-correlation proxy: Pearson r
+    between the retrace's lateral profile (resampled over forward progress) and
+    the dataset's value profile. Treat this as a rough proxy; for rigorous
+    accuracy, log the value profile or graph mapping per trial.
 """
 import argparse
 import csv
-import glob
 import json
 import math
 import os
 import statistics as stats
 
 
-def recall_score(trial):
-    qs = trial.get("questions", [])
-    correct = sum(1 for q in qs if q.get("answeredIndex", -1) == q.get("correctIndex", -2))
-    return correct, len(qs)
+def read_csv_rows(path):
+    if not os.path.exists(path):
+        return []
+    with open(path, newline="") as f:
+        return list(csv.DictReader(f))
 
 
-def path_metrics(retrace):
-    """Descriptive metrics of a retrace path (list of {t,x,z})."""
-    n = len(retrace)
+def trial_key(row):
+    """(participant_id, presentation_order) uniquely identifies a trial."""
+    return (row.get("participant_id"), row.get("presentation_order"))
+
+
+def path_metrics(samples):
+    """Descriptive metrics of a retrace path (list of retracing_log.csv rows,
+    already filtered to one trial)."""
+    n = len(samples)
     if n == 0:
         return {"samples": 0, "length": 0.0, "duration": 0.0,
                 "x_range": 0.0, "z_range": 0.0}
-    xs = [p["x"] for p in retrace]
-    zs = [p["z"] for p in retrace]
-    ts = [p.get("t", 0.0) for p in retrace]
+    samples = sorted(samples, key=lambda s: float(s.get("t_seconds", 0.0) or 0.0))
+    xs = [float(s["head_x"]) for s in samples]
+    zs = [float(s["head_z"]) for s in samples]
+    ts = [float(s.get("t_seconds", 0.0) or 0.0) for s in samples]
     length = 0.0
     for i in range(1, n):
-        dx = retrace[i]["x"] - retrace[i - 1]["x"]
-        dz = retrace[i]["z"] - retrace[i - 1]["z"]
+        dx = xs[i] - xs[i - 1]
+        dz = zs[i] - zs[i - 1]
         length += math.hypot(dx, dz)
     return {
         "samples": n,
@@ -75,12 +98,12 @@ def pearson(a, b):
     return num / (da * db) if da > 0 and db > 0 else float("nan")
 
 
-def resample_lateral(retrace, k):
+def resample_lateral(samples, k):
     """Resample lateral offset (x) over forward progress (z) into k bins."""
-    if len(retrace) < 2:
+    if len(samples) < 2:
         return None
-    zs = [p["z"] for p in retrace]
-    xs = [p["x"] for p in retrace]
+    zs = [float(s["head_z"]) for s in samples]
+    xs = [float(s["head_x"]) for s in samples]
     z0, z1 = min(zs), max(zs)
     if z1 - z0 == 0:
         return None
@@ -100,25 +123,32 @@ def normalize(vals):
     return [(v - lo) / (hi - lo) for v in vals]
 
 
-def retrace_shape_corr(retrace, values):
+def retrace_shape_corr(samples, values):
     """Proxy: correlation between retrace lateral profile and dataset value profile."""
     k = len(values)
     if k < 2:
         return float("nan")
-    lat = resample_lateral(retrace, k)
+    lat = resample_lateral(samples, k)
     if lat is None:
         return float("nan")
     return pearson(normalize(lat), normalize(values))
 
 
+def to_int(row, key, default=0):
+    try:
+        return int(row.get(key, default) or default)
+    except (TypeError, ValueError):
+        return default
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("logs_dir")
+    ap.add_argument("study_data_dir")
     ap.add_argument("--out", default=None)
     ap.add_argument("--datasets", default=None)
     args = ap.parse_args()
 
-    out_dir = args.out or args.logs_dir
+    out_dir = args.out or os.path.join(args.study_data_dir, "analysis")
     os.makedirs(out_dir, exist_ok=True)
 
     datasets = {}
@@ -126,50 +156,52 @@ def main():
         with open(args.datasets) as f:
             datasets = json.load(f)
 
-    files = sorted(glob.glob(os.path.join(args.logs_dir, "participant_*.json")))
-    if not files:
-        print(f"No participant_*.json files found in {args.logs_dir}")
+    trials = read_csv_rows(os.path.join(args.study_data_dir, "trials.csv"))
+    if not trials:
+        print(f"No trials.csv found (or it's empty) in {args.study_data_dir}")
         return
+    retrace_rows = read_csv_rows(os.path.join(args.study_data_dir, "retracing_log.csv"))
+
+    retrace_by_trial = {}
+    for r in retrace_rows:
+        retrace_by_trial.setdefault(trial_key(r), []).append(r)
 
     rows = []
-    for path in files:
-        with open(path) as f:
-            log = json.load(f)
-        pid = log.get("participantId")
-        for t in log.get("trials", []):
-            correct, total = recall_score(t)
-            pm = path_metrics(t.get("retracePath", []))
-            ds = t.get("datasetName", "")
-            corr = float("nan")
-            if ds in datasets:
-                corr = retrace_shape_corr(t.get("retracePath", []), datasets[ds])
-            rows.append({
-                "participant": pid,
-                "order": t.get("orderIndex"),
-                "condition": t.get("condition"),
-                "dataset": ds,
-                "recall_correct": correct,
-                "recall_total": total,
-                "recall_pct": (100.0 * correct / total) if total else 0.0,
-                "walk_s": round(t.get("walkSeconds", 0.0), 3),
-                "distractor_s": round(t.get("distractorSeconds", 0.0), 3),
-                "retrace_s": round(t.get("retraceSeconds", 0.0), 3),
-                "retrace_samples": pm["samples"],
-                "retrace_len": round(pm["length"], 3),
-                "retrace_x_range": round(pm["x_range"], 3),
-                "retrace_z_range": round(pm["z_range"], 3),
-                "retrace_shape_r": round(corr, 3) if not math.isnan(corr) else "",
-            })
+    for t in trials:
+        samples = retrace_by_trial.get(trial_key(t), [])
+        pm = path_metrics(samples)
+        ds = t.get("dataset_id", "")
+        corr = float("nan")
+        if ds in datasets:
+            corr = retrace_shape_corr(samples, datasets[ds])
 
-    trials_csv = os.path.join(out_dir, "trials.csv")
-    with open(trials_csv, "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+        recall_total = to_int(t, "recall_total")
+        recall_correct = to_int(t, "recall_score")
+
+        row = dict(t)   # keep every raw trials.csv column
+        row.update({
+            "recall_pct": round(100.0 * recall_correct / recall_total, 1) if recall_total else 0.0,
+            "retrace_samples": pm["samples"],
+            "retrace_len": round(pm["length"], 3),
+            "retrace_x_range": round(pm["x_range"], 3),
+            "retrace_z_range": round(pm["z_range"], 3),
+            "retrace_shape_r": round(corr, 3) if not math.isnan(corr) else "",
+        })
+        rows.append(row)
+
+    fieldnames = list(trials[0].keys()) + [
+        "recall_pct", "retrace_samples", "retrace_len",
+        "retrace_x_range", "retrace_z_range", "retrace_shape_r",
+    ]
+    trials_out = os.path.join(out_dir, "analysis_trials.csv")
+    with open(trials_out, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=fieldnames)
         w.writeheader()
         w.writerows(rows)
 
     conds = {}
     for r in rows:
-        conds.setdefault(r["condition"], []).append(r)
+        conds.setdefault(r.get("condition", ""), []).append(r)
 
     cond_rows = []
     for cond, rs in sorted(conds.items()):
@@ -183,20 +215,21 @@ def main():
             "retrace_len_mean": round(stats.mean(lens), 3),
         })
 
-    conds_csv = os.path.join(out_dir, "conditions.csv")
-    with open(conds_csv, "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=list(cond_rows[0].keys()))
+    conds_out = os.path.join(out_dir, "analysis_conditions.csv")
+    with open(conds_out, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=list(cond_rows[0].keys()) if cond_rows else [])
         w.writeheader()
         w.writerows(cond_rows)
 
-    n_part = len(files)
-    print(f"Parsed {n_part} participant file(s), {len(rows)} trials.\n")
+    n_part = len({t.get("participant_id") for t in trials})
+    print(f"Parsed {n_part} participant(s), {len(rows)} trial(s).")
+    print()
     print("Per-condition recall (mean % correct):")
     for c in cond_rows:
         print(f"  {c['condition']:16s} n={c['n_trials']:2d}  "
               f"recall={c['recall_pct_mean']:5.1f}% (sd {c['recall_pct_sd']:.1f})  "
               f"retrace_len={c['retrace_len_mean']:.2f}")
-    print(f"\nWrote:\n  {trials_csv}\n  {conds_csv}")
+    print(f"\nWrote:\n  {trials_out}\n  {conds_out}")
 
 
 if __name__ == "__main__":

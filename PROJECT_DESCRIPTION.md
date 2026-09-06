@@ -41,11 +41,15 @@ offset/height), then reconstruct it from memory. We test whether adding sensory
   shape from memory; their floor path is sampled.
 - **Recall** — 4 multiple-choice questions about the data.
 
-### What is measured (written to the per-participant JSON log)
+### What is measured (written incrementally to CSV — see §6)
 
-Per trial: condition, dataset, phase durations, distractor start number, the **retrace
-path** (world x/z samples over time), and the **recall questions** with the chosen
-answer (→ recall score). See §6 and `Analysis/analyze_study.py`.
+Per trial: condition, dataset, phase durations, distractor start number
+(`trials.csv`), the **retrace path** (world x/y/z samples over time,
+`retracing_log.csv`), and the **recall questions** with the chosen answer
+(`value_questions.csv` → recall score). See §6 and `Analysis/analyze_study.py`.
+Test/pilot CSV data can be permanently cleared from the Unity Editor menu
+**Tools > Study Data** (see HOW_TO_RUN §7) -- an Editor-only action, not part of
+the in-VR runtime UI.
 
 ---
 
@@ -62,7 +66,7 @@ Assets/
   Samples/XR Interaction Toolkit/3.3.1/…   ← Starter Assets rig + XR Interaction Simulator
   XRI/Settings/…               ← XR Device/Interaction Simulator settings
 Analysis/
-  analyze_study.py             ← log → CSV analysis pipeline (§6)
+  analyze_study.py             ← raw CSV -> analysis CSV pipeline (§6)
   datasets.json                ← exported dataset value profiles (for retrace proxy)
 ROADMAP.md, HOW_TO_RUN.md, XR_MODE_SWITCHING.md, PROJECT_DESCRIPTION.md
 ```
@@ -111,7 +115,8 @@ SessionController.StartSession()
    → BuildTrials()                 // counterbalanced condition×dataset list (§5)
    → NextTrial(): GraphManager.SetData + GenerateGraph + ConditionManager.SetCondition
    → phases advance via UI buttons OR debug keys (Enter / 1–4)
-   → per-trial TrialResult accumulated; on finish → WriteLog() JSON
+   → CSV rows appended as they happen: retracing_log.csv (end of Retrace),
+     value_questions.csv (each answered question), trials.csv (last question answered)
 ```
 
 ### Audio mode (session-wide)
@@ -195,10 +200,11 @@ affect study results.
 ### 4.7 Retrace capture (`SessionController.Update`)
 - During `Retrace`, the head's ground position `(x, z)` is sampled every
   **`retraceSampleInterval = 0.1 s`** into `retracePath`.
-- **Study impact / data gap:** the log stores the path but **not** the graph geometry, so
-  absolute retrace accuracy can't be recovered from the log alone. `analyze_study.py`
-  gives a normalised shape-correlation *proxy* via `datasets.json`. For rigorous accuracy,
-  log the per-trial value profile / graph transform in `WriteLog()`.
+- **Study impact / data gap:** `retracing_log.csv` stores the path but **not** the graph
+  geometry, so absolute retrace accuracy can't be recovered from the log alone.
+  `analyze_study.py` gives a normalised shape-correlation *proxy* via `datasets.json`. For
+  rigorous accuracy, log the per-trial value profile / graph transform in
+  `SessionController`'s CSV-writing methods.
 
 ---
 
@@ -212,7 +218,7 @@ affect study results.
 | Audio pitch/tempo salience | `CueAudioController.minPitch/maxPitch`, `minPulsesPerSecond/maxPulsesPerSecond`. |
 | Default audio mode | `AudioModeSelector.mode` (or pick at runtime on the start screen). |
 | 2 trials per condition | `SessionController.trialsPerCondition = 2`. |
-| Which participant | `SessionController.participantId` (drives counterbalancing + log name). |
+| Which participant | `SessionController.participantId` (drives counterbalancing + the `participant_id` column, formatted `p01`/`p02`/…). |
 | Walkable corridor size | `PathSampler.regionMargin`, `regionHalfWidth`. |
 | Recall difficulty | distractor `step` factor (0.15) in `MakeNumericQuestion`. |
 | Add/rename a condition | Add a `ConditionId`, add a `Condition_*` object with `CueConditionController`, add it to `ConditionManager.conditions` **in id order**, add to `AllConditions` in `SessionController`. |
@@ -222,11 +228,16 @@ affect study results.
 
 ## 6. Analysis (`Analysis/analyze_study.py`)
 
-- Input: a folder of `participant_*.json` logs (see HOW_TO_RUN for where they land).
-- Output: `trials.csv` (one row/trial: recall score & %, phase durations, retrace metrics,
-  optional shape-correlation) and `conditions.csv` (per-condition mean recall % + SD).
+- Input: the `StudyData` folder itself (`trials.csv`, `retracing_log.csv` — see
+  HOW_TO_RUN for where it lands). No JSON parsing anymore.
+- Output (default `StudyData/analysis/`, so it never collides with Unity's own raw
+  `trials.csv`): `analysis_trials.csv` (every raw trial column plus recall %, retrace path
+  metrics, optional shape-correlation) and `analysis_conditions.csv` (per-condition mean
+  recall % + SD).
 - `datasets.json` (exported from the GraphData assets) enables the retrace shape-correlation
   proxy; regenerate it if the datasets change.
+- Not implemented: the data notes doc's 5th file, `questionnaires.csv` (TLX etc.) — no
+  questionnaire UI exists in the project yet.
 
 ---
 

@@ -3,7 +3,13 @@ using System.Collections.Generic;
 using System.Globalization;
 using UnityEngine;
 
-/// <summary>Serializable data model for a study session, written to disk as JSON.</summary>
+/// <summary>
+/// Data model for a study session. Nothing here is JSON-serialized any more --
+/// SessionController writes CSV rows directly (see its Write*Csv methods), matching
+/// the schema in the sources-folder data notes doc (trials.csv, value_questions.csv,
+/// retracing_log.csv). These classes remain as convenient in-memory containers for a
+/// trial/question/sample while it's being built up.
+/// </summary>
 
 public enum SessionPhase { Idle, Walk, Distractor, Retrace, Recall, Complete }
 
@@ -12,23 +18,25 @@ public enum SessionPhase { Idle, Walk, Distractor, Retrace, Recall, Complete }
 public class TrialSpec
 {
     public ConditionId condition;
-    public GraphData dataset;      // not serialized to JSON directly; name is logged
+    public GraphData dataset;      // not written directly; name is logged
     public int orderIndex;         // 0-based position within the session
     public int trialInCondition;   // 0-based repeat index for this condition
 }
 
 /// <summary>
 /// A single recall question. Always carries both a multiple-choice representation
-/// (options/correctIndex) and the raw numeric answer/unit, so the UI can render
-/// either style (RunSettings.recallInputMode) without SessionController needing to
-/// know which one is active. Answered via exactly one of answeredIndex (MCQ) or
-/// typedAnswer (free-text numeric entry).
+/// (options/optionValues/correctIndex) and the raw answerValue/unit, so the UI can
+/// render either style (RunSettings.recallInputMode) without SessionController
+/// needing to know which one is active. Answered via exactly one of answeredIndex
+/// (MCQ) or typedAnswer (free-text numeric entry).
 /// </summary>
 [Serializable]
 public class RecallQuestion
 {
+    public string questionType;  // e.g. "max_value", "min_value", "end_value", "range_value"
     public string prompt;
     public string[] options;
+    public float[] optionValues; // raw numeric value behind each options[] entry, same order
     public int correctIndex;
     public int answeredIndex = -1;
 
@@ -55,6 +63,21 @@ public class RecallQuestion
         }
     }
 
+    /// <summary>The participant's response as a plain number, however it was given (for CSV export).</summary>
+    public float? ResponseValue
+    {
+        get
+        {
+            if (!string.IsNullOrEmpty(typedAnswer))
+                return float.TryParse(typedAnswer.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out float v) ? v : (float?)null;
+            if (answeredIndex >= 0 && optionValues != null && answeredIndex < optionValues.Length)
+                return optionValues[answeredIndex];
+            return null;
+        }
+    }
+
+    public string AnswerMode => !string.IsNullOrEmpty(typedAnswer) ? "text" : "mcq";
+
     // Matches SessionController.Display() so a typed value is judged by the same
     // rounding the multiple-choice options are shown with.
     private static string DisplayValue(float v) => Mathf.Max(0f, v).ToString("0.#", CultureInfo.InvariantCulture);
@@ -64,9 +87,11 @@ public class RecallQuestion
 [Serializable]
 public struct RetraceSample
 {
-    public float t;   // seconds since retrace start
-    public float x;   // world X
-    public float z;   // world Z
+    public string timestampUtc; // ISO-8601 wall-clock time of this sample
+    public float t;             // seconds since retrace start
+    public float x;             // world X
+    public float y;             // world Y (head height)
+    public float z;             // world Z
 }
 
 /// <summary>Everything recorded for one completed trial.</summary>
@@ -77,6 +102,9 @@ public class TrialResult
     public string condition;
     public string datasetName;
     public int trialInCondition;
+
+    public string startedUtc;
+    public string finishedUtc;
 
     public float walkSeconds;
     public float distractorSeconds;
@@ -95,15 +123,4 @@ public class TrialResult
             return s;
         }
     }
-}
-
-/// <summary>Top-level log for a participant's whole session.</summary>
-[Serializable]
-public class SessionLog
-{
-    public int participantId;
-    public string startedUtc;
-    public string finishedUtc;
-    public int trialsPerCondition;
-    public List<TrialResult> trials = new List<TrialResult>();
 }
