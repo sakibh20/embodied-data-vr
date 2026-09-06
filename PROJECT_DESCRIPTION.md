@@ -4,7 +4,7 @@
 > objects, changed constants, new conditions, etc.). Companion files:
 > `ROADMAP.md` (milestones/status), `HOW_TO_RUN.md` (run steps),
 > `XR_MODE_SWITCHING.md` (desktop / simulator / headset).
-> Last updated: 2026-09-06.
+> Last updated: 2026-09-06 (M29).
 
 ---
 
@@ -66,7 +66,8 @@ Assets/
   Samples/XR Interaction Toolkit/3.3.1/…   ← Starter Assets rig + XR Interaction Simulator
   XRI/Settings/…               ← XR Device/Interaction Simulator settings
 Analysis/
-  analyze_study.py             ← raw CSV -> analysis CSV pipeline (§6)
+  analyze_study.py             ← raw CSV -> analysis CSV pipeline (§6), reads every
+                                   participant subfolder under StudyData/
   datasets.json                ← exported dataset value profiles (for retrace proxy)
 ROADMAP.md, HOW_TO_RUN.md, XR_MODE_SWITCHING.md, PROJECT_DESCRIPTION.md
 ```
@@ -186,15 +187,32 @@ affect study results.
 - **Study impact:** removes positional-guessing confound; distractors scale with each
   dataset's range so difficulty is comparable across datasets.
 
-### 4.6 Counterbalancing (`SessionController.BuildTrials`)
-- Cyclic Latin square: for participant `p`, `startRow = (p−1) mod 5`; trial order =
-  `AllConditions[(startRow + block + k) mod 5]`.
-- With `trialsPerCondition = 1` each condition appears once; over any 5 consecutive
-  participant IDs each condition lands in each position exactly once.
-- Dataset per trial: `datasetPool[(startDs + order) mod poolCount]`, `startDs = (p−1) mod 6`.
-- **Study impact:** balances condition order across participants. **Known minor issue:**
-  `startRow` and `startDs` both advance by +1/participant, so condition↔dataset pairing is
-  partially correlated for consecutive participants; if full decorrelation is needed,
+### 4.6 Condition order & counterbalancing (`SessionController.BuildTrials`)
+- Condition order is chosen by **`RunSettings.conditionOrderMode`** (M29), one of:
+  - `Sequential` — the same fixed order every session: Control, Abstract, Representative,
+    SemanticAudio, SemanticVisual. Identical for every participant — **provides no
+    order-effect counterbalancing on its own**.
+  - `Random` — all 5 conditions (Control included) shuffled into a fully random order.
+  - `RandomExceptControlFirst` — Control is forced into position 0; the remaining 4 are
+    shuffled after it, so every participant sees Control first.
+  The two random modes are seeded from `participantId` (and the block index, if
+  `trialsPerCondition > 1`) via `BuildConditionOrder`/`ConditionOrderSeed` — reproducible
+  per participant, not dependent on Unity's global random state, same pattern as the
+  recall answer-slot seed in §4.5.
+- Dataset per trial is independent of condition order: `datasetPool[(startDs + order) mod
+  poolCount]`, `startDs = (p−1) mod 6`, where `order` is just the flat 0-based trial index
+  — whichever condition `BuildConditionOrder` places at that index gets paired with it.
+- **Study impact:** `Sequential` is simplest but the whole cohort sees the same order
+  (a real design decision — pick this only if you have another reason to trust internal
+  validity, e.g. a short pilot). `RandomExceptControlFirst` establishes Control as a
+  consistent baseline/acclimation trial while still varying the other 4. Neither random
+  mode is a formal Latin square, so with a small cohort, order could by chance skew
+  toward one condition landing later more often than a true Latin square would prevent
+  — for guaranteed per-position balance across participants, a Latin-square rotation
+  (as used before M29) would need to be reintroduced as an additional mode.
+- **Known minor issue (pre-existing, still applies to dataset assignment):** `startDs`
+  advances by a fixed +1/participant, so dataset assignment is the same sequence
+  regardless of condition order; if full decorrelation from `participantId` is needed,
   advance `startDs` by a different stride (a prime).
 
 ### 4.7 Retrace capture (`SessionController.Update`)
@@ -218,7 +236,8 @@ affect study results.
 | Audio pitch/tempo salience | `CueAudioController.minPitch/maxPitch`, `minPulsesPerSecond/maxPulsesPerSecond`. |
 | Default audio mode | `AudioModeSelector.mode` (or pick at runtime on the start screen). |
 | 2 trials per condition | `SessionController.trialsPerCondition = 2`. |
-| Which participant | `SessionController.participantId` (drives counterbalancing + the `participant_id` column, formatted `p01`/`p02`/…). |
+| Which participant | `SessionController.participantId` (drives condition-order/dataset seeding + the `participant_id` column, formatted `p01`/`p02`/…); auto-suggested at startup and adjustable on the Idle screen (M28). |
+| Condition order (Sequential/Random/Random-except-Control-first) | `RunSettings.conditionOrderMode` (§4.6, M29). |
 | Walkable corridor size | `PathSampler.regionMargin`, `regionHalfWidth`. |
 | Recall difficulty | distractor `step` factor (0.15) in `MakeNumericQuestion`. |
 | Add/rename a condition | Add a `ConditionId`, add a `Condition_*` object with `CueConditionController`, add it to `ConditionManager.conditions` **in id order**, add to `AllConditions` in `SessionController`. |
@@ -228,8 +247,11 @@ affect study results.
 
 ## 6. Analysis (`Analysis/analyze_study.py`)
 
-- Input: the `StudyData` folder itself (`trials.csv`, `retracing_log.csv` — see
-  HOW_TO_RUN for where it lands). No JSON parsing anymore.
+- Input: the `StudyData` folder itself — each participant's own subfolder
+  (`StudyData/p01/trials.csv`, `StudyData/p02/trials.csv`, ... — see M28) is read and
+  concatenated; a flat `StudyData/trials.csv` etc. is also read directly if present,
+  for backward compatibility with data collected before per-participant folders
+  existed. No JSON parsing anymore.
 - Output (default `StudyData/analysis/`, so it never collides with Unity's own raw
   `trials.csv`): `analysis_trials.csv` (every raw trial column plus recall %, retrace path
   metrics, optional shape-correlation) and `analysis_conditions.csv` (per-condition mean
@@ -243,9 +265,12 @@ affect study results.
 
 ## 7. Known issues / decisions pending
 
-- **M12 walk-phase UI occlusion (design decision):** the study UI panel is head-locked
-  ~2 m ahead and blocks the floor graph during Walk. Needs a decision on how to present
-  the walk-phase prompt (hide it, world-anchor it, controller-button to end walk, etc.).
+- ~~**M12 walk-phase UI occlusion**~~ RESOLVED (M27): the panel is now hidden entirely
+  during Walk and Retrace (`SessionUI.Render`), and those two phases auto-end when the
+  participant walks past the far end of the graph corridor (`SessionController.
+  CheckAutoEndOfPhase`) instead of waiting for a "Done" button. The panel is visible
+  only for Idle / Distractor / Recall / Complete, i.e. only when a real interaction
+  (button, MCQ, text entry) is expected. See M27 in ROADMAP.md.
 - **Retrace accuracy data gap** (§4.7): log the value profile for rigorous scoring.
 - **Enum vs object naming** for id 3/4 (§1): cosmetic mismatch.
 - **Counterbalancing dataset correlation** (§4.6): optional decorrelation improvement.

@@ -2,17 +2,21 @@
 """
 Embodied-Data-VR -- study analysis pipeline (M16, updated for CSV logging).
 
-SessionController now writes its raw data straight to CSV -- trials.csv,
-value_questions.csv, retracing_log.csv -- as shared files that grow across the
-whole study (every participant appends rows to the same three files; there is no
-more one-JSON-per-participant). This script reads those raw CSVs and derives
-per-trial retrace metrics and per-condition summaries from them; it no longer
-reads any JSON.
+SessionController writes its raw data straight to CSV -- trials.csv,
+value_questions.csv, retracing_log.csv -- one copy of each inside every
+participant's own subfolder (<study_data_dir>/p01/trials.csv, <study_data_dir>/p02/
+trials.csv, ...) rather than one shared file for the whole study, so each
+participant's data is self-contained and can be copied/backed up/deleted on its
+own. This script reads those raw CSVs -- across every participant subfolder it
+finds -- and derives per-trial retrace metrics and per-condition summaries from
+them; it no longer reads any JSON. For backward compatibility it also reads a
+flat <study_data_dir>/trials.csv etc. directly, if present, from data collected
+before this per-participant layout existed.
 
 Usage:
     python analyze_study.py <study_data_dir> [--out <out_dir>] [--datasets datasets.json]
 
-Inputs (in <study_data_dir>, as written by SessionController):
+Inputs (found under <study_data_dir>/<participant>/, as written by SessionController):
     trials.csv          one row per trial: participant_id, condition, audio_cue,
                          visual_cue, presentation_order, trial_in_condition,
                          dataset_id, timestamps, phase durations, recall_score,
@@ -45,6 +49,7 @@ Notes on retrace accuracy:
 """
 import argparse
 import csv
+import glob
 import json
 import math
 import os
@@ -56,6 +61,25 @@ def read_csv_rows(path):
         return []
     with open(path, newline="") as f:
         return list(csv.DictReader(f))
+
+
+def read_all_rows(study_data_dir, filename):
+    """
+    Reads rows for `filename` (e.g. "trials.csv") from every participant's own
+    subfolder under study_data_dir (study_data_dir/p01/trials.csv, p02/..., etc. --
+    how SessionController writes them now). Also reads a flat
+    study_data_dir/<filename> directly, if present, for backward compatibility with
+    data collected before per-participant folders existed. The "analysis" output
+    subfolder (this script's own --out default) is skipped so a re-run doesn't try
+    to read its own outputs back in as a "participant".
+    """
+    rows = []
+    rows.extend(read_csv_rows(os.path.join(study_data_dir, filename)))
+    for entry in sorted(glob.glob(os.path.join(study_data_dir, "*"))):
+        if not os.path.isdir(entry) or os.path.basename(entry) == "analysis":
+            continue
+        rows.extend(read_csv_rows(os.path.join(entry, filename)))
+    return rows
 
 
 def trial_key(row):
@@ -156,11 +180,12 @@ def main():
         with open(args.datasets) as f:
             datasets = json.load(f)
 
-    trials = read_csv_rows(os.path.join(args.study_data_dir, "trials.csv"))
+    trials = read_all_rows(args.study_data_dir, "trials.csv")
     if not trials:
-        print(f"No trials.csv found (or it's empty) in {args.study_data_dir}")
+        print(f"No trials.csv found (or it's empty) under {args.study_data_dir} "
+              f"(checked the flat layout and every participant subfolder)")
         return
-    retrace_rows = read_csv_rows(os.path.join(args.study_data_dir, "retracing_log.csv"))
+    retrace_rows = read_all_rows(args.study_data_dir, "retracing_log.csv")
 
     retrace_by_trial = {}
     for r in retrace_rows:
@@ -221,6 +246,32 @@ def main():
         w.writeheader()
         w.writerows(cond_rows)
 
+    # Per-participant condition order: which condition each participant got, in the
+    # order they got it (trials.csv already carries this via participant_id +
+    # presentation_order + condition on every row -- this just makes it a ready-made
+    # artifact instead of something reconstructed by hand each time).
+    order_by_participant = {}
+    for r in rows:
+        pid = r.get("participant_id", "")
+        order_by_participant.setdefault(pid, []).append(
+            (to_int(r, "presentation_order"), r.get("condition", ""))
+        )
+
+    order_rows = []
+    for pid, seq in sorted(order_by_participant.items()):
+        seq.sort(key=lambda x: x[0])
+        order_rows.append({
+            "participant_id": pid,
+            "n_trials": len(seq),
+            "condition_order": " -> ".join(cond for _, cond in seq),
+        })
+
+    order_out = os.path.join(out_dir, "analysis_participant_order.csv")
+    with open(order_out, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=["participant_id", "n_trials", "condition_order"])
+        w.writeheader()
+        w.writerows(order_rows)
+
     n_part = len({t.get("participant_id") for t in trials})
     print(f"Parsed {n_part} participant(s), {len(rows)} trial(s).")
     print()
@@ -229,7 +280,11 @@ def main():
         print(f"  {c['condition']:16s} n={c['n_trials']:2d}  "
               f"recall={c['recall_pct_mean']:5.1f}% (sd {c['recall_pct_sd']:.1f})  "
               f"retrace_len={c['retrace_len_mean']:.2f}")
-    print(f"\nWrote:\n  {trials_out}\n  {conds_out}")
+    print()
+    print("Condition order per participant:")
+    for o in order_rows:
+        print(f"  {o['participant_id']:6s} ({o['n_trials']} trial(s)): {o['condition_order']}")
+    print(f"\nWrote:\n  {trials_out}\n  {conds_out}\n  {order_out}")
 
 
 if __name__ == "__main__":

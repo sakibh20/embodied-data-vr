@@ -95,10 +95,23 @@ you press Play in `Experiment.unity`.
 
 ## 4. Set the participant
 
-Before each participant, set **`SessionController.participantId`** in the Inspector
-(1, 2, 3, …). This drives both the counterbalanced order and the `participant_id` column
-written into every CSV row (formatted as `p01`, `p02`, …). Optionally set
-**`trialsPerCondition`** (1 or 2).
+The participant ID is now auto-suggested (M28): on start, `SessionController` scans
+`StudyData/` for the highest existing participant folder and defaults to one past it, and
+the Idle screen shows it (`Participant: p02`) with **-`/`+`** buttons so you can see and
+adjust it before clicking Start Session (no need to touch the Inspector). It drives both
+the counterbalanced order and the `participant_id` column written into every CSV row
+(formatted as `p01`, `p02`, …). If you do need to force a specific value, the Inspector
+field (`SessionController.participantId`) still works too — it's just overwritten by the
+auto-suggestion at startup, so set it after entering Play, or adjust it with the Idle
+screen's `-`/`+` buttons instead. Optionally set **`trialsPerCondition`** (1 or 2).
+
+Condition order is set on the **`RunSettings`** asset via **`conditionOrderMode`** (M29):
+`Sequential` (same fixed order every session), `Random` (all 5 conditions shuffled
+freely), or `RandomExceptControlFirst` (Control always first, the other 4 shuffled).
+Random modes are seeded per participant, so re-running the same participant id
+reproduces the same order. See `PROJECT_DESCRIPTION.md` §4.6 for the trade-offs between
+the three modes (in particular: `Sequential` alone does not vary order across
+participants).
 
 ---
 
@@ -106,18 +119,20 @@ written into every CSV row (formatted as `p01`, `p02`, …). Optionally set
 
 Data is written as **CSV**, incrementally (a row is appended the moment it happens, not
 batched to the end of the session — so a crash mid-session loses at most the current
-trial). All participants across the whole study share the same four growing files —
-these are NOT one-file-per-participant like the old JSON log:
+trial). As of M28, **each participant gets their own subfolder** — self-contained, so you
+can copy/back up/delete one participant's data independently of everyone else's:
 
 ```
-<persistentDataPath>/StudyData/trials.csv           one row per trial
-<persistentDataPath>/StudyData/value_questions.csv  one row per recall question
-<persistentDataPath>/StudyData/retracing_log.csv    one row per retrace sample
+<persistentDataPath>/StudyData/p01/trials.csv           one row per trial
+<persistentDataPath>/StudyData/p01/value_questions.csv  one row per recall question
+<persistentDataPath>/StudyData/p01/retracing_log.csv    one row per retrace sample
+<persistentDataPath>/StudyData/p02/trials.csv           (next participant, same 3 files)
+...
 ```
 
 On Windows this is typically:
 ```
-C:\Users\<you>\AppData\LocalLow\DefaultCompany\Thesis\StudyData\
+C:\Users\<you>\AppData\LocalLow\DefaultCompany\Thesis\StudyData\p01\
 ```
 
 Columns follow the schema in the sources-folder data notes doc
@@ -126,8 +141,11 @@ presentation_order, dataset_id, ...` plus per-file specifics (phase durations an
 score in `trials.csv`; question text/correct answer/response/is_correct/answer_mode in
 `value_questions.csv`; timestamp + head_x/y/z in `retracing_log.csv`).
 
-Point the analysis script (§6) straight at the `StudyData` folder — there's nothing to
-copy or merge across participants, since everyone already appended into the same files.
+Point the analysis script (§6) at the **`StudyData`** folder itself (not a single
+participant's subfolder) — it walks every participant subfolder automatically and
+aggregates them, so there's still nothing to copy or merge by hand. (Data collected
+before M28 as flat files directly in `StudyData/` is also still picked up, for
+backward compatibility.)
 
 ---
 
@@ -138,8 +156,9 @@ cd Analysis
 python analyze_study.py <path_to_StudyData_folder> --datasets datasets.json
 ```
 
-The script reads `trials.csv` and `retracing_log.csv` straight from
-that folder (no more JSON parsing). Outputs go to `<StudyData_folder>/analysis/` by
+The script reads `trials.csv` and `retracing_log.csv` from every participant subfolder
+under that folder and concatenates them (no more JSON parsing). Outputs go to
+`<StudyData_folder>/analysis/` by
 default (pass `--out <dir>` to change it) — deliberately a subfolder, so the script's own
 outputs never collide with Unity's raw `trials.csv` sitting next to it:
 - `analysis_trials.csv` — every raw `trials.csv` column, plus recall %, retrace path
@@ -162,10 +181,12 @@ This is an Editor-only action (an operator/researcher step between sessions, not
 something participants see) under the Unity menu bar: **Tools > Study Data**.
 
 - **Clear Study Data...** — shows exactly what's currently recorded (a row count per
-  CSV file) and asks for confirmation before deleting `trials.csv`, `value_questions.csv`,
-  and `retracing_log.csv` from `StudyData/` (see §5). Use this to wipe out pilot/test runs
-  before starting real data collection — **this is permanent**. Greyed out automatically
-  when there's no data to clear. Works whether or not you're in Play mode.
+  CSV file, per participant folder) and asks for confirmation before deleting
+  `trials.csv`, `value_questions.csv`, and `retracing_log.csv` from every participant
+  folder under `StudyData/` (see §5) — including any leftover pre-M28 flat files sitting
+  directly in `StudyData/`. Use this to wipe out pilot/test runs before starting real data
+  collection — **this is permanent**. Greyed out automatically when there's no data to
+  clear. Works whether or not you're in Play mode.
 - **Show Summary** — same row-count listing, without deleting anything.
 - **Open Data Folder** — reveals the `StudyData/` folder in Explorer.
 

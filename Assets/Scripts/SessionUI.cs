@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem.UI;
 using UnityEngine.XR.Interaction.Toolkit.UI;   // XRUIInputModule, TrackedDeviceGraphicRaycaster
+using System.Globalization;
 
 /// <summary>
 /// Head-locked in-VR UI for the study. Instantiates a SessionCanvasView prefab (the
@@ -13,6 +14,15 @@ using UnityEngine.XR.Interaction.Toolkit.UI;   // XRUIInputModule, TrackedDevice
 /// options, or a single SessionAnswerInput for free-text recall answers when
 /// RunSettings.recallInputMode is TextEntry. Works with a mouse on desktop and with
 /// an XR controller ray via TrackedDeviceGraphicRaycaster/XRUIInputModule.
+/// The panel is only ever visible when a real interaction is expected of the
+/// participant (Idle's start/audio-mode picker, Distractor's "Done", Recall's MCQ/text
+/// entry, Complete) — it is fully hidden (GameObject.SetActive(false)) during Walk and
+/// Retrace, since those phases show no UI at all and would otherwise occlude the floor
+/// graph while the participant is looking at/re-walking it (ROADMAP.md M12); see
+/// SessionController.CheckAutoEndOfPhase for how those two phases end without a button.
+/// Recall answers are never skippable: MCQ requires clicking a real option, and the
+/// free-text entry rejects an empty/unparseable submission in place (with inline
+/// feedback) rather than letting it advance as a blank answer.
 /// (Clearing test/pilot CSV data is a Unity Editor menu action, not part of this
 /// runtime UI — see Assets/Editor/StudyDataMenu.cs, "Tools/Study Data".)
 /// </summary>
@@ -67,6 +77,14 @@ public class SessionUI : MonoBehaviour
         ClearItems();
         if (_view == null) return;
 
+        // Walk and Retrace have no interaction (see SessionController.CheckAutoEndOfPhase) --
+        // hide the head-locked panel entirely so it never occludes the floor graph while the
+        // participant is walking/retracing (ROADMAP.md M12). Idle/Distractor/Recall/Complete
+        // all need a real interaction (button or MCQ), so the panel stays visible there.
+        bool showPanel = phase != SessionPhase.Walk && phase != SessionPhase.Retrace;
+        _view.gameObject.SetActive(showPanel);
+        if (!showPanel) return;
+
         string trialTag = (phase != SessionPhase.Idle && phase != SessionPhase.Complete)
             ? $"Trial {session.TrialNumber}/{session.TotalTrials}   " : "";
 
@@ -74,9 +92,20 @@ public class SessionUI : MonoBehaviour
         {
             case SessionPhase.Idle:
                 _view.Title.text = "Data Physicalisation Study";
+                {
+                    string body = $"Participant: <b>{session.ParticipantLabel}</b> (auto-suggested from existing data -- adjust below if this is wrong)\n\n";
+                    if (audioMode != null)
+                        body += $"Audio cue mode: <b>{ModeLabel(audioMode.Mode)}</b>\nChoose a mode, then start.";
+                    else
+                        body += "Ready to begin.";
+                    _view.Body.text = body;
+                }
+                AddOptionButton($"−  Participant  ({session.ParticipantLabel})",
+                          () => { session.DecrementParticipantId(); Render(SessionPhase.Idle); });
+                AddOptionButton($"+  Participant  ({session.ParticipantLabel})",
+                          () => { session.IncrementParticipantId(); Render(SessionPhase.Idle); });
                 if (audioMode != null)
                 {
-                    _view.Body.text = $"Audio cue mode: <b>{ModeLabel(audioMode.Mode)}</b>\nChoose a mode, then start.";
                     AddOptionButton(Tick(audioMode.Mode, CueAudioController.AudioMode.PitchOnly) + "Audio: Pitch only",
                               () => { audioMode.SetPitchOnly(); Render(SessionPhase.Idle); });
                     AddOptionButton(Tick(audioMode.Mode, CueAudioController.AudioMode.TempoOnly) + "Audio: Tempo only",
@@ -84,17 +113,7 @@ public class SessionUI : MonoBehaviour
                     AddOptionButton(Tick(audioMode.Mode, CueAudioController.AudioMode.Both) + "Audio: Both",
                               () => { audioMode.SetBoth(); Render(SessionPhase.Idle); });
                 }
-                else
-                {
-                    _view.Body.text = "Ready to begin.";
-                }
                 AddOptionButton("Start Session", () => session.StartSession());
-                break;
-
-            case SessionPhase.Walk:
-                _view.Title.text = trialTag + "Walk";
-                _view.Body.text = "Walk to the end of the graph, taking in the data as you go.";
-                AddOptionButton("Done walking", () => session.EndWalk());
                 break;
 
             case SessionPhase.Distractor:
@@ -102,12 +121,6 @@ public class SessionUI : MonoBehaviour
                 _view.Body.text = $"Count out loud backwards from <b>{session.DistractorStartNumber}</b> " +
                              "in steps of 3, until told to stop.";
                 AddOptionButton("Done", () => session.EndDistractor());
-                break;
-
-            case SessionPhase.Retrace:
-                _view.Title.text = trialTag + "Retrace";
-                _view.Body.text = "Now walk the same path again from memory. The line is hidden.";
-                AddOptionButton("Done retracing", () => session.EndRetrace());
                 break;
 
             case SessionPhase.Recall:
@@ -240,12 +253,25 @@ public class SessionUI : MonoBehaviour
             item.Input.ActivateInputField();
         }
 
+        string basePrompt = q.prompt;
         bool submitted = false;
         void Submit()
         {
             if (submitted) return;   // guard double-fire (Submit click + Enter key)
+
+            // Recall answers are not skippable: require a real, parseable number
+            // before advancing (SessionController rejects it too, as a backstop).
+            string text = item.Input != null ? item.Input.text : "";
+            if (string.IsNullOrWhiteSpace(text) ||
+                !float.TryParse(text.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out _))
+            {
+                if (_view != null) _view.Body.text = basePrompt + "\n<color=#FF6B6B>Enter a number to continue.</color>";
+                if (item.Input != null) item.Input.ActivateInputField();
+                return;
+            }
+
             submitted = true;
-            session.AnswerCurrentQuestionText(item.Input != null ? item.Input.text : "");
+            session.AnswerCurrentQuestionText(text);
         }
 
         if (item.Submit != null) item.Submit.onClick.AddListener(Submit);

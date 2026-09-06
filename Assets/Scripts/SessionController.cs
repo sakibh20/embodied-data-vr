@@ -10,15 +10,22 @@ using UnityEngine.InputSystem;
 /// dataset), each driven through the phases Walk -> Distractor -> Retrace -> Recall.
 /// Data is written as CSV, matching the schema in the sources-folder data notes doc --
 /// trials.csv (one row per trial), value_questions.csv (one row per recall question),
-/// and retracing_log.csv (one row per retrace sample) -- all appended into a shared,
-/// growing file per study rather than one file per participant, and written
-/// incrementally (retrace rows at end of Retrace, a question row the moment it's
-/// answered, a trial row the moment its last recall question is answered) so a crash
-/// mid-session loses at most the current in-progress trial, not the whole participant.
+/// and retracing_log.csv (one row per retrace sample) -- written into that
+/// participant's own subfolder under StudyData/ (StudyData/p01/trials.csv, etc., see
+/// ParticipantDir), so each participant's data is a self-contained set of files that
+/// can be copied/backed up/deleted independently instead of one giant shared file per
+/// study. Still written incrementally within that folder (retrace rows at end of
+/// Retrace, a question row the moment it's answered, a trial row the moment its last
+/// recall question is answered) so a crash mid-session loses at most the current
+/// in-progress trial, not the whole participant.
 ///
-/// The in-VR UI (built separately) calls the public API -- StartSession, EndWalk,
-/// EndDistractor, EndRetrace, AnswerCurrentQuestion/AnswerCurrentQuestionText -- and
-/// reads Phase / the current question / the distractor number to drive its panels.
+/// The in-VR UI (built separately, SessionUI) calls the public API -- StartSession,
+/// EndDistractor, AnswerCurrentQuestion/AnswerCurrentQuestionText -- and reads Phase /
+/// the current question / the distractor number to drive its panels. EndWalk/EndRetrace
+/// are instead called by this class itself (CheckAutoEndOfPhase, from Update): Walk and
+/// Retrace show no UI panel (it would occlude the floor graph -- ROADMAP.md M12), so
+/// those two phases end themselves once the participant walks past the far end of the
+/// graph corridor, rather than waiting for a button press.
 /// Optional debug keys let the whole flow be exercised on desktop without the UI.
 /// The static ClearAllStudyData/StudyDataSummary/HasStudyData helpers are for clearing
 /// out test/pilot CSV data -- see the "Tools/Study Data" Unity menu (Editor/StudyDataMenu.cs),
@@ -30,6 +37,7 @@ public class SessionController : MonoBehaviour
     [SerializeField] private GraphManager graphManager;
     [SerializeField] private ConditionManager conditionManager;
     [SerializeField] private Transform player;   // head/camera, for retrace capture
+    [SerializeField] private PathSampler pathSampler;   // for auto-detecting end of Walk/Retrace
 
     [Header("Design")]
     [SerializeField] private List<GraphData> datasetPool = new List<GraphData>();
@@ -39,6 +47,16 @@ public class SessionController : MonoBehaviour
 
     [Header("Retrace capture")]
     [SerializeField] private float retraceSampleInterval = 0.1f;
+
+    [Header("Walk/Retrace auto-end (UI is hidden during these phases -- see SessionUI)")]
+    [Tooltip("Metres the participant must walk past the far end of the graph corridor " +
+             "before Walk/Retrace auto-ends. Requires an intentional pass-through rather " +
+             "than stopping exactly on the last data point.")]
+    [SerializeField] private float autoEndOvershoot = 0.3f;
+    [Tooltip("Seconds to ignore auto-end right after the phase starts, so the participant's " +
+             "starting position (or a stale PathSampler reading mid graph-generation) can't " +
+             "fire it immediately.")]
+    [SerializeField] private float autoEndGracePeriod = 0.5f;
 
     [Header("Debug")]
     [Tooltip("Enter = advance phase; number keys answer during Recall. For desktop " +
@@ -68,6 +86,14 @@ private void Awake()
     {
         if (graphManager == null) graphManager = FindAnyObjectByType<GraphManager>();
         if (conditionManager == null) conditionManager = FindAnyObjectByType<ConditionManager>();
+        if (pathSampler == null) pathSampler = FindAnyObjectByType<PathSampler>();
+
+        // Auto-suggest the next participant ID from what's already in trials.csv,
+        // instead of always starting from whatever was last left in the Inspector
+        // (which is how every test session so far ended up logged as p01 -- nothing
+        // ever advanced it). Still adjustable on the Idle screen (+/-) before Start.
+        participantId = SuggestNextParticipantId();
+
         // 'player' is no longer resolved/cached here -- see Update, which reads
         // PlayerRig.Head live every frame (falling back to ResolvePlayerHead only
         // if nothing set it, e.g. no SessionBootstrap in the scene).
@@ -104,7 +130,59 @@ private void Awake()
     public int QuestionNumber => _questionIndex + 1;
     public int QuestionCount => _result?.questions.Count ?? 0;
 
-    private string ParticipantLabel => $"p{participantId:00}";
+    /// <summary>Participant label as written to CSV ("p01", "p02", ...). Shown/adjusted on the Idle screen.</summary>
+    public string ParticipantLabel => $"p{participantId:00}";
+
+    public void IncrementParticipantId() => participantId++;
+    public void DecrementParticipantId() => participantId = Mathf.Max(1, participantId - 1);
+
+    /// <summary>
+    /// Scans StudyData/ for the highest participant folder ("p07" -> 7) already
+    /// present and returns one past it (or 1 if there's no data yet). Folder-based
+    /// rather than an in-memory counter, so it's correct across Editor restarts and
+    /// gives a sensible default even the very first time the scene is opened.
+    /// Test/pilot participant folders count too -- clear them first via Tools > Study
+    /// Data > Clear Study Data before a real run if you don't want them to push the
+    /// suggested number up.
+    /// </summary>
+    public static int SuggestNextParticipantId()
+    {
+        string baseDir = StudyDataDir();
+        int max = 0;
+
+        foreach (var dir in Directory.GetDirectories(baseDir))
+        {
+            if (TryParseParticipantNumber(Path.GetFileName(dir), out int n) && n > max) max = n;
+        }
+
+        // Also fold in a legacy flat trials.csv directly in StudyData/, from before
+        // per-participant folders existed (ROADMAP M28), so a stale legacy file
+        // can't cause a new participant to collide with an old one's id.
+        string legacyTrials = Path.Combine(baseDir, "trials.csv");
+        if (File.Exists(legacyTrials))
+        {
+            string[] lines = File.ReadAllLines(legacyTrials);
+            for (int i = 1; i < lines.Length; i++)   // skip header row
+            {
+                int comma = lines[i].IndexOf(',');
+                if (comma <= 0) continue;
+                if (TryParseParticipantNumber(lines[i].Substring(0, comma).Trim(), out int n) && n > max) max = n;
+            }
+        }
+
+        return max + 1;
+    }
+
+    // Parses a participant label ("p07") into its numeric id (7). Shared by
+    // SuggestNextParticipantId's folder scan and its legacy-file fallback.
+    private static bool TryParseParticipantNumber(string label, out int n)
+    {
+        n = 0;
+        if (string.IsNullOrEmpty(label) || label.Length < 2) return false;
+        char c0 = label[0];
+        if (c0 != 'p' && c0 != 'P') return false;
+        return int.TryParse(label.Substring(1), out n);
+    }
 
     // =====================================================================
     // Session lifecycle
@@ -131,21 +209,27 @@ private void Awake()
         NextTrial();
     }
 
-    // Cyclic Latin-square counterbalancing of the 5 conditions, rotated by participant.
-    // Each condition repeats trialsPerCondition times (one per block).
+    // Condition order per RunSettings.conditionOrderMode (Sequential / Random /
+    // RandomExceptControlFirst -- see BuildConditionOrder), one order per block.
+    // Dataset order is unrelated to condition order: it always advances by the flat
+    // trial index (participant-rotated), independent of which condition lands where.
     private void BuildTrials()
     {
         _trials.Clear();
         int n = AllConditions.Length;
-        int startRow = (participantId - 1) % n;
         int startDs = datasetPool.Count > 0 ? (participantId - 1) % datasetPool.Count : 0;
         int order = 0;
 
+        ConditionOrderMode mode = StudyConfig.Settings != null
+            ? StudyConfig.Settings.conditionOrderMode
+            : ConditionOrderMode.Sequential;
+
         for (int block = 0; block < trialsPerCondition; block++)
         {
+            ConditionId[] blockOrder = BuildConditionOrder(mode, block);
             for (int k = 0; k < n; k++)
             {
-                var cond = AllConditions[(startRow + block + k) % n];
+                var cond = blockOrder[k];
                 var ds = datasetPool[(startDs + order) % datasetPool.Count];
                 _trials.Add(new TrialSpec
                 {
@@ -161,6 +245,58 @@ private void Awake()
         if (datasetPool.Count < _trials.Count)
             Debug.LogWarning($"[Session] Only {datasetPool.Count} datasets for {_trials.Count} " +
                              "trials -- some will repeat within the session. Add more datasets.");
+    }
+
+    // Builds the condition order for one block (repeat) of trials:
+    //  - Sequential: the same fixed AllConditions order every time -- identical across
+    //    participants, so this mode alone provides no order-effect counterbalancing.
+    //  - Random: all 5 conditions (Control included) shuffled freely.
+    //  - RandomExceptControlFirst: Control forced into position 0, the remaining 4
+    //    shuffled after it -- Control is always the first condition a participant sees.
+    // The two random modes are seeded from participantId + block (ConditionOrderSeed),
+    // matching the reproducible-seed pattern already used for recall answer-slot
+    // placement, so a participant's order is stable/reproducible rather than depending
+    // on Unity's global random state.
+    private ConditionId[] BuildConditionOrder(ConditionOrderMode mode, int block)
+    {
+        switch (mode)
+        {
+            case ConditionOrderMode.Random:
+            {
+                var order = (ConditionId[])AllConditions.Clone();
+                Shuffle(order, ConditionOrderSeed(block));
+                return order;
+            }
+            case ConditionOrderMode.RandomExceptControlFirst:
+            {
+                var rest = new List<ConditionId>(AllConditions.Length - 1);
+                foreach (var c in AllConditions)
+                    if (c != ConditionId.Control) rest.Add(c);
+                var restArray = rest.ToArray();
+                Shuffle(restArray, ConditionOrderSeed(block));
+
+                var order = new ConditionId[AllConditions.Length];
+                order[0] = ConditionId.Control;
+                restArray.CopyTo(order, 1);
+                return order;
+            }
+            case ConditionOrderMode.Sequential:
+            default:
+                return (ConditionId[])AllConditions.Clone();
+        }
+    }
+
+    // Reproducible per participant/block seed for condition-order shuffling.
+    private int ConditionOrderSeed(int block) => participantId * 40503 ^ (block + 1) * 200003;
+
+    private static void Shuffle<T>(T[] array, int seed)
+    {
+        var rng = new System.Random(seed);
+        for (int i = array.Length - 1; i > 0; i--)
+        {
+            int j = rng.Next(i + 1);
+            (array[i], array[j]) = (array[j], array[i]);
+        }
     }
 
     private void NextTrial()
@@ -247,7 +383,19 @@ private void Awake()
     {
         var q = CurrentQuestion;
         if (q == null) return;
-        q.typedAnswer = text ?? "";
+
+        // Recall answers are not skippable: reject an empty/unparseable submission
+        // instead of silently recording a blank "skip" and advancing. SessionUI
+        // validates first and shows the participant feedback; this is the
+        // authoritative backstop in case anything else ever calls this directly.
+        if (string.IsNullOrWhiteSpace(text) ||
+            !float.TryParse(text.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out _))
+        {
+            Debug.LogWarning("[Session] Rejected empty/invalid recall answer -- question is not skippable.");
+            return;
+        }
+
+        q.typedAnswer = text;
         WriteQuestionCsv(q);
         AdvanceRecall();
     }
@@ -390,7 +538,28 @@ private void Update()
             }
         }
 
+        CheckAutoEndOfPhase(head);
+
         if (debugKeys) HandleDebugKeys();
+    }
+
+    // Walk and Retrace have no on-screen UI while they're active (SessionUI hides its
+    // panel during these phases so the head-locked panel doesn't occlude the floor
+    // graph -- see PROJECT_DESCRIPTION.md Sec.7 / ROADMAP.md M12). Instead of a "Done"
+    // button, each phase ends itself once the participant has actually walked past the
+    // far end of the graph corridor -- a physical completion signal instead of a UI one.
+    private void CheckAutoEndOfPhase(Transform head)
+    {
+        if (_phase != SessionPhase.Walk && _phase != SessionPhase.Retrace) return;
+        if (head == null || pathSampler == null || !pathSampler.IsReady) return;
+        if (graphManager != null && graphManager.IsGenerating) return;   // sampler may be stale mid-tween
+        if (Time.time - _phaseStart < autoEndGracePeriod) return;
+
+        float d = pathSampler.DistanceAlong(head.position);
+        if (d < pathSampler.TotalLength + autoEndOvershoot) return;
+
+        if (_phase == SessionPhase.Walk) EndWalk();
+        else EndRetrace();
     }
 
     private void HandleDebugKeys()
@@ -410,7 +579,16 @@ private void Update()
             }
         }
 
-        if (_phase == SessionPhase.Recall)
+        // Only treat 1-4 as MCQ shortcuts when the recall UI is actually in
+        // MultipleChoice mode. In TextEntry mode those same digits are legitimate
+        // characters the participant is typing into the answer box (e.g. "12.5") --
+        // without this guard, typing "1"/"2"/"3" into the field also fired an MCQ
+        // answer-by-index here and immediately advanced the question out from under
+        // the input field, bypassing it (and the not-skippable validation) entirely.
+        bool mcqShortcutsActive = StudyConfig.Settings == null
+            || StudyConfig.Settings.recallInputMode == RecallInputMode.MultipleChoice;
+
+        if (_phase == SessionPhase.Recall && mcqShortcutsActive)
         {
             if (kb.digit1Key.wasPressedThisFrame) AnswerCurrentQuestion(0);
             else if (kb.digit2Key.wasPressedThisFrame) AnswerCurrentQuestion(1);
@@ -443,7 +621,7 @@ private void Update()
     private void WriteTrialCsv(TrialResult r)
     {
         var (audio, visual) = CueLabels(r.condition);
-        AppendCsvRow("trials.csv", TrialsHeader, new[]
+        AppendCsvRow(ParticipantLabel, "trials.csv", TrialsHeader, new[]
         {
             ParticipantLabel, r.condition, audio, visual, (r.orderIndex + 1).ToString(),
             r.trialInCondition.ToString(), r.datasetName, r.startedUtc, r.finishedUtc,
@@ -459,7 +637,7 @@ private void Update()
     {
         var (audio, visual) = CueLabels(_result.condition);
         float? response = q.ResponseValue;
-        AppendCsvRow("value_questions.csv", QuestionsHeader, new[]
+        AppendCsvRow(ParticipantLabel, "value_questions.csv", QuestionsHeader, new[]
         {
             ParticipantLabel, _result.condition, audio, visual, (_result.orderIndex + 1).ToString(),
             _result.datasetName, "q" + (_result.questions.IndexOf(q) + 1), q.questionType, q.prompt,
@@ -475,7 +653,7 @@ private void Update()
         string order = (r.orderIndex + 1).ToString();
         foreach (var s in r.retracePath)
         {
-            AppendCsvRow("retracing_log.csv", RetraceHeader, new[]
+            AppendCsvRow(ParticipantLabel, "retracing_log.csv", RetraceHeader, new[]
             {
                 ParticipantLabel, r.condition, audio, visual, order, r.datasetName,
                 s.timestampUtc, s.t.ToString("0.###", CultureInfo.InvariantCulture),
@@ -504,11 +682,11 @@ private void Update()
         }
     }
 
-    private static void AppendCsvRow(string fileName, string[] header, string[] row)
+    private static void AppendCsvRow(string participantLabel, string fileName, string[] header, string[] row)
     {
         try
         {
-            string path = Path.Combine(StudyDataDir(), fileName);
+            string path = Path.Combine(ParticipantDir(participantLabel), fileName);
             bool exists = File.Exists(path);
 
             using (var w = new StreamWriter(path, append: true))
@@ -519,7 +697,7 @@ private void Update()
         }
         catch (Exception e)
         {
-            Debug.LogError($"[Session] Failed to write {fileName}: {e.Message}");
+            Debug.LogError($"[Session] Failed to write {fileName} for {participantLabel}: {e.Message}");
         }
     }
 
@@ -531,6 +709,7 @@ private void Update()
         return value;
     }
 
+    /// <summary>The root StudyData folder (holds one subfolder per participant).</summary>
     public static string StudyDataDir()
     {
         string dir = Path.Combine(Application.persistentDataPath, "StudyData");
@@ -538,9 +717,21 @@ private void Update()
         return dir;
     }
 
-    // The raw CSV files SessionController writes. "demographics.csv" is included only
-    // so a settings-menu clear picks up any leftover file from before the participant
-    // demographics form was removed from the study -- nothing writes it any more.
+    /// <summary>One participant's own folder (StudyData/p01/, etc.), created on first use.
+    /// Each participant's trials/questions/retrace CSVs live only here, self-contained --
+    /// so a single participant's folder can be copied, zipped, or deleted independently
+    /// of everyone else's data.</summary>
+    public static string ParticipantDir(string participantLabel)
+    {
+        string dir = Path.Combine(StudyDataDir(), participantLabel);
+        Directory.CreateDirectory(dir);
+        return dir;
+    }
+
+    // The raw CSV files SessionController writes, inside each participant's own folder.
+    // "demographics.csv" is included only so a settings-menu clear picks up any leftover
+    // file from before the participant demographics form was removed from the study --
+    // nothing writes it any more.
     private static readonly string[] StudyDataFiles =
         { "trials.csv", "value_questions.csv", "retracing_log.csv", "demographics.csv" };
 
@@ -553,40 +744,97 @@ private void Update()
     /// a menu action, not a per-frame call).</summary>
     public static string StudyDataSummary()
     {
-        string dir = StudyDataDir();
+        string baseDir = StudyDataDir();
         var lines = new List<string>();
+
+        // Legacy flat files directly in StudyData/, from before per-participant
+        // folders existed (ROADMAP M28) -- still surfaced here so "Clear Study Data"
+        // has full visibility into everything it's about to delete.
+        var legacy = new List<string>();
         foreach (var f in StudyDataFiles)
         {
-            string p = Path.Combine(dir, f);
+            string p = Path.Combine(baseDir, f);
             if (!File.Exists(p)) continue;
-            int rows = Math.Max(0, File.ReadAllLines(p).Length - 1);   // minus header
-            lines.Add($"{f}: {rows} row(s)");
+            int rows = Math.Max(0, File.ReadAllLines(p).Length - 1);
+            legacy.Add($"{f}: {rows} row(s)");
+        }
+        if (legacy.Count > 0)
+            lines.Add("(legacy, pre-per-participant) -- " + string.Join(", ", legacy));
+
+        var participantDirs = Directory.GetDirectories(baseDir);
+        Array.Sort(participantDirs);
+        foreach (var pdir in participantDirs)
+        {
+            string label = Path.GetFileName(pdir);
+            var fileSummaries = new List<string>();
+            foreach (var f in StudyDataFiles)
+            {
+                string p = Path.Combine(pdir, f);
+                if (!File.Exists(p)) continue;
+                int rows = Math.Max(0, File.ReadAllLines(p).Length - 1);   // minus header
+                fileSummaries.Add($"{f}: {rows} row(s)");
+            }
+            if (fileSummaries.Count > 0)
+                lines.Add($"{label} -- " + string.Join(", ", fileSummaries));
         }
         return lines.Count > 0 ? string.Join("\n", lines) : "No study data recorded yet.";
     }
 
-    /// <summary>True if any recorded CSV data exists (so the UI can grey out/hide "Clear" when there's nothing to clear).</summary>
+    /// <summary>True if any legacy flat file or participant folder has recorded CSV data
+    /// (so the UI can grey out/hide "Clear" when there's nothing to clear).</summary>
     public static bool HasStudyData()
     {
-        string dir = StudyDataDir();
+        string baseDir = StudyDataDir();
         foreach (var f in StudyDataFiles)
-            if (File.Exists(Path.Combine(dir, f))) return true;
+            if (File.Exists(Path.Combine(baseDir, f))) return true;   // legacy flat file
+        foreach (var pdir in Directory.GetDirectories(baseDir))
+            foreach (var f in StudyDataFiles)
+                if (File.Exists(Path.Combine(pdir, f))) return true;
         return false;
     }
 
-    /// <summary>Permanently deletes every recorded CSV file (trials/questions/retrace, plus any
-    /// leftover demographics.csv). Intended for clearing out test/pilot runs from the settings
-    /// menu before real data collection -- irreversible, so the UI must confirm before calling this.</summary>
+    /// <summary>Permanently deletes every recorded CSV file -- any legacy flat files directly
+    /// in StudyData/, plus trials/questions/retrace (and any leftover demographics.csv) inside
+    /// every participant folder -- then removes any participant folder left empty. Intended
+    /// for clearing out test/pilot runs from the settings menu before real data collection --
+    /// irreversible, so the UI must confirm before calling this.</summary>
     public static string ClearAllStudyData()
     {
-        string dir = StudyDataDir();
-        int deleted = 0;
+        string baseDir = StudyDataDir();
+        int deletedFiles = 0;
+        int touchedParticipants = 0;
+
+        // Legacy flat files directly in StudyData/ (pre-per-participant).
         foreach (var f in StudyDataFiles)
         {
-            string p = Path.Combine(dir, f);
-            if (File.Exists(p)) { File.Delete(p); deleted++; }
+            string p = Path.Combine(baseDir, f);
+            if (File.Exists(p)) { File.Delete(p); deletedFiles++; }
         }
-        Debug.Log($"[Session] Cleared {deleted} study data file(s) from {dir}");
-        return deleted > 0 ? $"Cleared {deleted} file(s)." : "No study data found.";
+
+        foreach (var pdir in Directory.GetDirectories(baseDir))
+        {
+            bool any = false;
+            foreach (var f in StudyDataFiles)
+            {
+                string p = Path.Combine(pdir, f);
+                if (File.Exists(p)) { File.Delete(p); deletedFiles++; any = true; }
+            }
+            if (any) touchedParticipants++;
+
+            // Remove the now-empty participant folder too, so old test participants
+            // don't linger and skew SuggestNextParticipantId.
+            try
+            {
+                if (Directory.GetFileSystemEntries(pdir).Length == 0) Directory.Delete(pdir);
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[Session] Could not remove empty folder {pdir}: {e.Message}");
+            }
+        }
+        Debug.Log($"[Session] Cleared {deletedFiles} study data file(s) across {touchedParticipants} participant folder(s) (plus any legacy files) from {baseDir}");
+        return deletedFiles > 0
+            ? $"Cleared {deletedFiles} file(s) across {touchedParticipants} participant folder(s) (including any legacy files)."
+            : "No study data found.";
     }
 }
