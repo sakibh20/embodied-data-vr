@@ -55,11 +55,13 @@ public class SessionController : MonoBehaviour
     /// <summary>Raised whenever the phase changes, so UI can refresh.</summary>
     public event Action<SessionPhase> PhaseChanged;
 
-    private void Awake()
+private void Awake()
     {
         if (graphManager == null) graphManager = FindAnyObjectByType<GraphManager>();
         if (conditionManager == null) conditionManager = FindAnyObjectByType<ConditionManager>();
-        player = ResolvePlayerHead();
+        // 'player' is no longer resolved/cached here -- see Update, which reads
+        // PlayerRig.Head live every frame (falling back to ResolvePlayerHead only
+        // if nothing set it, e.g. no SessionBootstrap in the scene).
     }
 
     // Resolve the transform whose position is captured during retrace.
@@ -328,15 +330,17 @@ public class SessionController : MonoBehaviour
     // Update: retrace capture + debug keys
     // =====================================================================
 
-    private void Update()
+private void Update()
     {
-        if (_phase == SessionPhase.Retrace && player != null)
+        Transform head = PlayerRig.Head != null ? PlayerRig.Head : ResolvePlayerHead();
+
+        if (_phase == SessionPhase.Retrace && head != null)
         {
             _retraceTimer -= Time.deltaTime;
             if (_retraceTimer <= 0f)
             {
                 _retraceTimer = retraceSampleInterval;
-                Vector3 p = player.position;
+                Vector3 p = head.position;
                 _result.retracePath.Add(new RetraceSample
                 {
                     t = Time.time - _phaseStart,

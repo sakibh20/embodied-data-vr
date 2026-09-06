@@ -1,7 +1,7 @@
 # How to Run — Embodied-Data-VR
 
 > Step-by-step guide to open, run, and collect data. See `PROJECT_DESCRIPTION.md` for
-> how it works, `XR_MODE_SWITCHING.md` for mode details. Last updated: 2026-08-15.
+> how it works, `XR_MODE_SWITCHING.md` for mode details. Last updated: 2026-09-06.
 
 ---
 
@@ -19,53 +19,70 @@
 ## 1. Open the project
 
 1. Unity Hub → **Add** → select this project folder → open with **6000.3.10f1**.
-2. Open the scene **`Assets/Scenes/Test.unity`** (it should open by default).
+2. Open the scene **`Assets/Scenes/Experiment.unity`** and press **Play**.
+   `SessionBootstrap` applies your `RunSettings` (see §2) and starts the session
+   automatically — no extra setup needed.
 3. Wait for compile/import to finish (no errors in the Console).
-
-The scene is currently saved in **VR Simulator** mode (XR rig on, desktop camera off).
-Use whichever mode below you need.
 
 ---
 
 ## 2. Choose a mode
 
-| Mode | `XR Origin (XR Rig)` | `Camera` (desktop) | Simulator setting | Headset |
-|------|----------------------|--------------------|-------------------|---------|
-| **A. Desktop** | disabled | enabled | off | — |
-| **B. Simulator (mock VR)** | enabled | disabled | on | — |
-| **C. Real headset** | enabled | disabled | off | connected |
+Mode is no longer picked by manually enabling/disabling GameObjects before pressing
+Play. It's set on the **`RunSettings`** asset
+(`Assets/ScriptableObjects/RunSettings.asset`) — select it in the Project window and
+set **Run Type** in the Inspector:
 
-- Rig on/off: select the GameObject in the Hierarchy, tick/untick its active checkbox (top-left of Inspector).
-- Simulator setting: `Assets/XRI/Settings/Resources/XRDeviceSimulatorSettings.asset` →
-  **Automatically Instantiate Simulator Prefab** (Editor-only; stripped from builds).
+| Run Type | What it drives | Simulator setting | Headset |
+|----------|-----------------|--------------------|---------|
+| **Desktop** | `Camera` (DesktopWalker) | off | — |
+| **Simulator** | `XR Origin (XR Rig)` + XR Interaction Simulator (mock VR, no headset) | on | — |
+| **VR** | `XR Origin (XR Rig)` + a real connected headset | off | connected |
 
-You do **not** need to rewire any camera/player references — `SessionController` and
-`WalkValueDriver` auto-resolve the head for the active mode.
+`SessionBootstrap` (on the `Bootstrap` object in `Experiment.unity`) reads this at
+startup and activates exactly one rig for you — `Camera` for Desktop, `XR Origin (XR
+Rig)` for Simulator/VR — and the spare `XR Origin (VR)` is always kept disabled. It also
+applies **Audio Mode** from the same asset. For Simulator mode, the
+**Automatically Instantiate Simulator Prefab** setting
+(`Assets/XRI/Settings/Resources/XRDeviceSimulatorSettings.asset`) still needs to be on
+(Editor-only; stripped from builds).
+
+You do **not** need to rewire any camera/player references, and you no longer need to
+remember to toggle GameObjects before pressing Play — `PlayerRig.Head` is set explicitly
+by `SessionBootstrap` from `RunSettings` and read live every frame by
+`WalkValueDriver`/`SessionController`. (The previous auto-resolve via `Camera.main` /
+`XRSettings.isDeviceActive` was fragile — see `ROADMAP.md` M19 — and has been replaced.)
 
 ---
 
 ## 3. Run a session
 
-### A. Desktop
-1. Set mode A (above). Press **Play**.
+Each of these assumes `RunSettings.runType` is already set to match (see §2) before
+you press Play in `Experiment.unity`.
+
+### Desktop
+1. Press **Play** (with `RunSettings.runType = Desktop`).
 2. The world-space study UI appears. Drive it with:
    - **Mouse** — click the on-screen buttons, **or**
-   - **Debug keys** — **Enter** advances each phase (Idle→Walk→Distractor→Retrace→Recall→next);
+   - **Debug keys** — **Enter** advances each phase (Walk→Distractor→Retrace→Recall→next);
      **1–4** answer recall questions.
 3. Move the player during Walk/Retrace with the **DesktopWalker** camera (WASD + mouse look)
    so the walk value is driven and the retrace path is captured.
-4. On the Idle screen, pick the **audio mode** (Pitch / Tempo / Both) before Start.
+4. **Audio mode** comes from `RunSettings`; it can still be changed live from the
+   in-session UI (Pitch / Tempo / Both) if needed.
 
-### B. Simulator (mock VR, no headset)
-1. Set mode B. Press **Play** — the **XR Interaction Simulator** auto-spawns (on-screen help shows the controls).
+### Simulator (mock VR, no headset)
+1. Press **Play** (with `RunSettings.runType = Simulator`) — the **XR Interaction
+   Simulator** auto-spawns (on-screen help shows the controls).
 2. Simulate movement/looking with keyboard + mouse (per the simulator help overlay) to
    "walk" the graph; the XR head drives the walk value exactly like a real headset.
 3. Interact with the UI either by pointing a **simulated controller ray** at the buttons
    (the canvas has an XR raycaster) or with the **debug keys** (Enter / 1–4).
 
-### C. Real headset
+### VR (real headset)
 1. Connect the headset, start its OpenXR runtime.
-2. Set mode C (turn the simulator setting **off** so simulated + real input don't conflict).
+2. Set `RunSettings.runType = VR` (turn the simulator setting **off** so simulated +
+   real input don't conflict).
 3. Press **Play** (or build & deploy). Physically walk the graph; use the controller ray
    for the UI.
 

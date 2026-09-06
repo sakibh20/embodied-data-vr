@@ -1,10 +1,20 @@
 # Switching between Desktop / VR Simulator / Real headset
 
-The scene (`Assets/Scenes/Test.unity`) runs in three modes. Switching is non-destructive
+The scene (`Assets/Scenes/Experiment.unity`) runs in three modes. Switching is non-destructive
 — the same study logic, graph, cues, and logging run in all three. `SessionController`
 and `WalkValueDriver` auto-resolve the "player head" (XR head when an XR device is
 active or the desktop camera is off; otherwise the DesktopWalker), so you don't rewire
 references when you switch.
+
+> **Update (2026-09-06):** these toggles are now applied automatically by
+> `SessionBootstrap` based on the `RunSettings` asset
+> (`Assets/ScriptableObjects/RunSettings.asset` → `Run Type`), instead of by hand.
+> The mechanics below are still accurate background (this is exactly what
+> `SessionBootstrap` flips), but in normal use you only need to set `Run Type` on
+> that asset — see `HOW_TO_RUN.md` §2. This also fixed a regression where the old
+> `Camera.main`-based auto-resolve in `WalkValueDriver`/`SessionController` could
+> pick the wrong/stale head transform (walk-value offset + broken activation-range
+> gating) — see `ROADMAP.md` M19.
 
 ## The toggles
 

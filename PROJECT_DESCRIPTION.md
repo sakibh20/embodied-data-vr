@@ -4,7 +4,7 @@
 > objects, changed constants, new conditions, etc.). Companion files:
 > `ROADMAP.md` (milestones/status), `HOW_TO_RUN.md` (run steps),
 > `XR_MODE_SWITCHING.md` (desktop / simulator / headset).
-> Last updated: 2026-08-15.
+> Last updated: 2026-09-06.
 
 ---
 
@@ -53,9 +53,12 @@ answer (→ recall score). See §6 and `Analysis/analyze_study.py`.
 
 ```
 Assets/
-  Scenes/Test.unity            ← the study scene (only scene that matters)
+  Scenes/Experiment.unity      ← the study scene. Open it and press Play — SessionBootstrap
+                                   applies RunSettings and starts the session automatically
   Scripts/                     ← all study code (compiles into Assembly-CSharp)
-  ScriptableObjects/…          ← GraphData assets (Dataset_01..06), GraphSettings
+  ScriptableObjects/RunSettings.asset  ← audioMode + runType (Desktop/Simulator/VR),
+                                   read by SessionBootstrap at startup
+  Data/…                       ← GraphData assets (Dataset_01..06), GraphSettings
   Samples/XR Interaction Toolkit/3.3.1/…   ← Starter Assets rig + XR Interaction Simulator
   XRI/Settings/…               ← XR Device/Interaction Simulator settings
 Analysis/
@@ -64,7 +67,7 @@ Analysis/
 ROADMAP.md, HOW_TO_RUN.md, XR_MODE_SWITCHING.md, PROJECT_DESCRIPTION.md
 ```
 
-### Key GameObjects in `Test.unity`
+### Key GameObjects in `Experiment.unity`
 
 | Object | Components | Role |
 |--------|-----------|------|
@@ -75,6 +78,7 @@ ROADMAP.md, HOW_TO_RUN.md, XR_MODE_SWITCHING.md, PROJECT_DESCRIPTION.md
 | `Grid` | `GridGenerator` | Draws the reference grid (one cross-line per data point + baseline). |
 | `WalkSystem` | `WalkValueDriver`, `PathSampler` | Reads the head position → data value → drives cues. |
 | `GraphRoot` | — | Parent transform everything (line, dots, grid) is built under. |
+| `Bootstrap` | `SessionBootstrap` | Runs first (`DefaultExecutionOrder(-100)`). Reads `RunSettings`, activates exactly one player rig, sets `PlayerRig.Head`, applies the audio mode, and starts the session. |
 | `Condition_*` (5) | `ControlCondition` **or** `CueConditionController` (+ `DensityController`, `CueAudioController`) | One cue-set per condition. |
 | `ExperimentArea` | `ExperimentArea` | Defines the room centre + walk-forward axis + random-point field. |
 | `SessionUI` | `SessionUI` | Self-building world-space study UI (phase prompts + buttons). |

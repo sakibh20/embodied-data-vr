@@ -24,9 +24,13 @@ public class WalkValueDriver : MonoBehaviour
 
     public void SetActive(bool value) => active = value;
 
-    private void Awake()
+private void Awake()
     {
-        player = ResolvePlayerHead();
+        // No longer resolves/caches the head here (see Update) -- PlayerRig.Head is
+        // set by SessionBootstrap and re-read live every frame, so this component
+        // never goes stale if the active rig changes after Awake. 'player' remains
+        // only as a last-resort fallback for running this scene without a
+        // SessionBootstrap in it (e.g. an older/ad-hoc test scene).
     }
 
     // Mirror SessionController: use the XR head camera when an XR device is active,
@@ -46,20 +50,21 @@ public class WalkValueDriver : MonoBehaviour
         return Camera.main != null ? Camera.main.transform : player;
     }
 
-    private void Update()
+private void Update()
     {
-        if (!active || player == null || path == null || !path.IsReady) return;
+        Transform head = PlayerRig.Head != null ? PlayerRig.Head : ResolvePlayerHead();
+        if (!active || head == null || path == null || !path.IsReady) return;
 
         // Cues run only while the participant is on the walk; outside the graph
         // region they are gated off (silent, no density) rather than clamped.
-        bool inRegion = path.IsWithinRegion(player.position);
+        bool inRegion = path.IsWithinRegion(head.position);
 
         if (conditionManager != null)
             conditionManager.SetCuesActive(inRegion);
 
         if (!inRegion) return;
 
-        float normalized = path.NormalizedValueAt(player.position);
+        float normalized = path.NormalizedValueAt(head.position);
         debugNormalizedValue = normalized;
 
         if (conditionManager != null)

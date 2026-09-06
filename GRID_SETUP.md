@@ -5,7 +5,7 @@ The grid system displays guidance lines on the ground synchronized with your gra
 
 ## Integration
 
-### In Your Scene (Test.unity or any scene)
+### In Your Scene (Experiment.unity or any scene)
 
 1. **Add Grid GameObject**
    - Right-click in hierarchy → 3D Object → Create Empty

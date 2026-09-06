@@ -272,16 +272,32 @@ public class GraphManager : MonoBehaviour
 
     // Point the sampler at the graph's final geometry. Reads the segment length from
     // the actual (scaled) dot spacing, so the value mapping is correct at any scale.
-    private void ConfigureSampler()
+private void ConfigureSampler()
     {
         if (pathSampler == null || graphData == null || _spawnedDots.Count == 0) return;
 
         Vector3 start = _spawnedDots[0].transform.position;
         Vector3 walkDir = area != null ? area.Forward : graphRoot.right;
-        float segment = _spawnedDots.Count > 1
-            ? Vector3.Distance(_spawnedDots[0].transform.position,
-                               _spawnedDots[1].transform.position)
-            : settings.spacing;
+
+        // Segment = projection of the dot spacing onto the walk axis, NOT raw
+        // Euclidean distance between adjacent dots. Value maps to LATERAL floor
+        // offset (see PROJECT_DESCRIPTION Sec.1), so adjacent dots also differ in
+        // that lateral direction whenever the data value changes -- Vector3.Distance
+        // between them is inflated by that lateral offset and is NOT the true
+        // per-point spacing along the walk. That inflated segment made PathSampler's
+        // TotalLength (and therefore both the value mapping and the on-walk region
+        // check) wrong -- values lagged behind the participant's real position, and
+        // the activation corridor extended well past the visible graph. Using the
+        // start->last span projected onto the walk axis, divided evenly across all
+        // points, is also more robust than reading a single dot0/dot1 pair.
+        float segment = settings.spacing;
+        if (_spawnedDots.Count > 1)
+        {
+            Vector3 last = _spawnedDots[_spawnedDots.Count - 1].transform.position;
+            float span = Vector3.Dot(last - start, walkDir);
+            segment = span / (_spawnedDots.Count - 1);
+        }
+
         pathSampler.Configure(start, walkDir, segment, graphData.values);
     }
 }
