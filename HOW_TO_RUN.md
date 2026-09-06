@@ -47,6 +47,8 @@ applies **Audio Mode** from the same asset. For Simulator mode, the
 (`Assets/XRI/Settings/Resources/XRDeviceSimulatorSettings.asset`) still needs to be on
 (Editor-only; stripped from builds).
 
+The same asset also has **Recall Phase → Recall Input Mode**: `MultipleChoice` (default — pick one of 4 options) or `TextEntry` (type the numeric value into a box instead). Switch it any time before pressing Play; `SessionUI` reads it from `RunSettings` via `StudyConfig` at startup and renders the recall phase accordingly.
+
 You do **not** need to rewire any camera/player references, and you no longer need to
 remember to toggle GameObjects before pressing Play — `PlayerRig.Head` is set explicitly
 by `SessionBootstrap` from `RunSettings` and read live every frame by
@@ -150,3 +152,9 @@ regenerate so the retrace proxy stays correct.
 - **Two audio listeners warning:** only one camera (desktop OR XR) should be active.
 - **Simulator didn't spawn:** check the simulator setting is on and the prefab is assigned
   in `XRDeviceSimulatorSettings`.
+
+---
+
+## 8. Customizing the in-session UI
+
+`SessionUI` no longer builds its canvas in code — it instantiates three prefabs under `Assets/Prefabs/UI/`: **`SessionCanvas.prefab`** (the panel: title, body, and a scrollable button/answer area — restyle colors/fonts/spacing here, it's a normal prefab), **`SessionOptionButton.prefab`** (one phase-action/MCQ-option button), and **`SessionAnswerInput.prefab`** (the text-entry recall answer box). Edit any of them directly in the Unity Editor; `SessionUI` only sets their text and click callbacks at runtime, so layout/look changes need no code changes.

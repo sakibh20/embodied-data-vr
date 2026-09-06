@@ -1,11 +1,12 @@
 using UnityEngine;
 
 /// <summary>
-/// Runs first (see DefaultExecutionOrder) in the study scene. Applies the
-/// RunSettings chosen on the Init screen: activates exactly one player rig for the
-/// chosen RunType, pushes the audio mode session-wide, publishes the resolved head
-/// transform via PlayerRig.Head, and then starts the session — so landing here
-/// (normally via the Init scene's Start Session button) requires no second click.
+/// Runs first (see DefaultExecutionOrder) in the study scene. Applies the RunSettings
+/// asset: activates exactly one player rig for the chosen RunType, pushes the audio
+/// mode session-wide, publishes the resolved head transform via PlayerRig.Head and
+/// the settings themselves via StudyConfig.Settings (so SessionUI knows whether to
+/// render recall as multiple-choice or a text-entry box), and then starts the
+/// session -- no entry scene/button needed.
 ///
 /// Forcing rig exclusivity here also removes a standing footgun: previously you
 /// had to remember to manually enable/disable the right GameObjects (Camera vs
@@ -21,7 +22,7 @@ public class SessionBootstrap : MonoBehaviour
     [Header("Rigs (exactly one is enabled for the chosen RunType)")]
     [Tooltip("The desktop Camera GameObject (DesktopWalker + AudioListener).")]
     [SerializeField] private GameObject desktopCameraObject;
-    [Tooltip("\"XR Origin (XR Rig)\" — used for both Simulator and VR run types; " +
+    [Tooltip("\"XR Origin (XR Rig)\" -- used for both Simulator and VR run types; " +
              "the editor-only XR Interaction Simulator supplies the input in " +
              "Simulator mode and is simply absent for a real headset in VR mode.")]
     [SerializeField] private GameObject xrRigObject;
@@ -33,13 +34,15 @@ public class SessionBootstrap : MonoBehaviour
 
     [Tooltip("Start the session automatically once the rig/audio setup is applied. " +
              "Turn off if you want to press the in-scene Start Session button/Enter " +
-             "key instead (e.g. quick desktop debugging without the Init scene).")]
+             "key instead (e.g. quick desktop debugging).")]
     [SerializeField] private bool autoStartSession = true;
 
     private void Awake()
     {
         if (audioModeSelector == null) audioModeSelector = FindAnyObjectByType<AudioModeSelector>();
         if (session == null) session = FindAnyObjectByType<SessionController>();
+
+        StudyConfig.Settings = settings;
 
         RunType mode = settings != null ? settings.runType : RunType.Desktop;
         ApplyRunType(mode);

@@ -6,13 +6,13 @@ using UnityEngine.InputSystem;
 
 /// <summary>
 /// Orchestrates a full study session: builds a counterbalanced list of trials
-/// (condition × dataset), then drives each trial through the phases
-/// Walk → Distractor → Retrace → Recall, and writes a JSON log per participant.
+/// (condition x dataset), then drives each trial through the phases
+/// Walk -> Distractor -> Retrace -> Recall, and writes a JSON log per participant.
 ///
-/// The in-VR UI (built separately) calls the public API — StartSession, EndWalk,
-/// EndDistractor, EndRetrace, AnswerCurrentQuestion — and reads Phase / the current
-/// question / the distractor number to drive its panels. Optional debug keys let
-/// the whole flow be exercised on desktop without the UI.
+/// The in-VR UI (built separately) calls the public API -- StartSession, EndWalk,
+/// EndDistractor, EndRetrace, AnswerCurrentQuestion/AnswerCurrentQuestionText -- and
+/// reads Phase / the current question / the distractor number to drive its panels.
+/// Optional debug keys let the whole flow be exercised on desktop without the UI.
 /// </summary>
 public class SessionController : MonoBehaviour
 {
@@ -65,7 +65,7 @@ private void Awake()
     }
 
     // Resolve the transform whose position is captured during retrace.
-    // In VR (an XR device is present/active) this is the head camera — the XR rig's
+    // In VR (an XR device is present/active) this is the head camera -- the XR rig's
     // Main Camera is tagged MainCamera, so Camera.main returns it. On desktop (no
     // device) we fall back to the serialized ref / DesktopWalker. This means the same
     // scene works in both modes with no manual re-wiring of the 'player' field.
@@ -154,7 +154,7 @@ private void Awake()
 
         if (datasetPool.Count < _trials.Count)
             Debug.LogWarning($"[Session] Only {datasetPool.Count} datasets for {_trials.Count} " +
-                             "trials — some will repeat within the session. Add more datasets.");
+                             "trials -- some will repeat within the session. Add more datasets.");
     }
 
     private void NextTrial()
@@ -227,16 +227,30 @@ private void Awake()
         SetPhase(SessionPhase.Recall);
     }
 
-    /// <summary>Answer the current recall question; advances to the next, or ends the trial.</summary>
+    /// <summary>Answer the current recall question by picking option index (multiple-choice mode).</summary>
     public void AnswerCurrentQuestion(int optionIndex)
     {
-        if (_phase != SessionPhase.Recall) return;
         var q = CurrentQuestion;
         if (q == null) return;
-
         q.answeredIndex = optionIndex;
-        _questionIndex++;
+        AdvanceRecall();
+    }
 
+    /// <summary>Answer the current recall question with a typed numeric value (text-entry mode).</summary>
+    public void AnswerCurrentQuestionText(string text)
+    {
+        var q = CurrentQuestion;
+        if (q == null) return;
+        q.typedAnswer = text ?? "";
+        AdvanceRecall();
+    }
+
+    // Shared "move to next question, or finish the trial" step used by both answer entry points.
+    private void AdvanceRecall()
+    {
+        if (_phase != SessionPhase.Recall) return;
+
+        _questionIndex++;
         if (_questionIndex >= _result.questions.Count)
         {
             _log.trials.Add(_result);
@@ -253,7 +267,7 @@ private void Awake()
         _phase = phase;
         _phaseStart = Time.time;
         PhaseChanged?.Invoke(phase);
-        Debug.Log($"[Session] Trial {TrialNumber}/{TotalTrials} → {phase}");
+        Debug.Log($"[Session] Trial {TrialNumber}/{TotalTrials} -> {phase}");
     }
 
     // =====================================================================
@@ -278,8 +292,10 @@ private void Awake()
         return qs;
     }
 
-    // Build a 4-option multiple-choice question around a numeric answer.
-    // The correct answer's slot is randomized with a seed derived from participant +
+    // Build a recall question around a numeric answer. Always fills both a 4-option
+    // multiple-choice representation (options/correctIndex) and the raw answerValue/unit,
+    // so RunSettings.recallInputMode can switch how it's rendered without touching this
+    // logic. The correct answer's slot is randomized with a seed derived from participant +
     // trial order + question index, so placement is unpredictable to the participant
     // yet fully reproducible for analysis. Distractors are offset by multiples of a
     // step scaled to the dataset's value range, and are guaranteed distinct from each
@@ -320,7 +336,14 @@ private void Awake()
         for (int i = 0; i < 4; i++)
             options[i] = (i == slot) ? $"{Display(answer)} {unit}" : $"{Display(distractors[di++])} {unit}";
 
-        return new RecallQuestion { prompt = prompt, options = options, correctIndex = slot };
+        return new RecallQuestion
+        {
+            prompt = prompt,
+            options = options,
+            correctIndex = slot,
+            answerValue = answer,
+            unit = unit
+        };
     }
 
     // Displayed numeric token for an option value (matches option formatting).

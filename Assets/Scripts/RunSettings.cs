@@ -3,13 +3,15 @@ using UnityEngine;
 /// <summary>Which rig drives the walk for a session.</summary>
 public enum RunType { Desktop, Simulator, VR }
 
+/// <summary>How the recall (memory-test) phase collects an answer.</summary>
+public enum RecallInputMode { MultipleChoice, TextEntry }
+
 /// <summary>
 /// Init-time configuration for a study run: which sonic dimension carries the data,
-/// and which player rig to use (desktop keyboard/mouse, the editor-only XR
-/// Interaction Simulator, or a real headset). Chosen on the Init screen (for now,
-/// edited directly on the asset — the Init screen itself is just a Start button
-/// until that UI exists); read once at startup by <see cref="SessionBootstrap"/>
-/// in the study scene.
+/// which player rig to use (desktop keyboard/mouse, the editor-only XR Interaction
+/// Simulator, or a real headset), and how recall questions are answered. Edited
+/// directly on the asset; read once at startup by <see cref="SessionBootstrap"/> in
+/// the study scene, which also publishes it to <see cref="StudyConfig"/> for the UI.
 /// </summary>
 [CreateAssetMenu(fileName = "RunSettings", menuName = "Embodied Data VR/Run Settings")]
 public class RunSettings : ScriptableObject
@@ -24,4 +26,9 @@ public class RunSettings : ScriptableObject
              "Simulator driving the XR rig in-editor, no headset needed. VR = the " +
              "same XR rig driven by a real connected headset.")]
     public RunType runType = RunType.Desktop;
+
+    [Header("Recall Phase")]
+    [Tooltip("MultipleChoice = pick one of 4 options (current default). TextEntry = " +
+             "type the numeric value into a text box instead of choosing.")]
+    public RecallInputMode recallInputMode = RecallInputMode.MultipleChoice;
 }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using UnityEngine;
 
 /// <summary>Serializable data model for a study session, written to disk as JSON.</summary>
@@ -16,7 +17,13 @@ public class TrialSpec
     public int trialInCondition;   // 0-based repeat index for this condition
 }
 
-/// <summary>A single recall question with multiple-choice options and the given answer.</summary>
+/// <summary>
+/// A single recall question. Always carries both a multiple-choice representation
+/// (options/correctIndex) and the raw numeric answer/unit, so the UI can render
+/// either style (RunSettings.recallInputMode) without SessionController needing to
+/// know which one is active. Answered via exactly one of answeredIndex (MCQ) or
+/// typedAnswer (free-text numeric entry).
+/// </summary>
 [Serializable]
 public class RecallQuestion
 {
@@ -25,8 +32,32 @@ public class RecallQuestion
     public int correctIndex;
     public int answeredIndex = -1;
 
-    public bool Answered => answeredIndex >= 0;
-    public bool IsCorrect => answeredIndex == correctIndex;
+    // Raw ground truth + unit, for text-entry scoring and for labelling the input field.
+    public float answerValue;
+    public string unit;
+
+    // Set when answered via a typed numeric value instead of picking an option.
+    public string typedAnswer;
+
+    public bool Answered => answeredIndex >= 0 || !string.IsNullOrEmpty(typedAnswer);
+
+    public bool IsCorrect
+    {
+        get
+        {
+            if (!string.IsNullOrEmpty(typedAnswer))
+            {
+                if (!float.TryParse(typedAnswer.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out float v))
+                    return false;
+                return DisplayValue(v) == DisplayValue(answerValue);
+            }
+            return answeredIndex == correctIndex;
+        }
+    }
+
+    // Matches SessionController.Display() so a typed value is judged by the same
+    // rounding the multiple-choice options are shown with.
+    private static string DisplayValue(float v) => Mathf.Max(0f, v).ToString("0.#", CultureInfo.InvariantCulture);
 }
 
 /// <summary>One sample of the participant's ground position during retrace.</summary>
