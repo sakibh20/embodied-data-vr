@@ -70,6 +70,7 @@ public class SessionController : MonoBehaviour
 
     private SessionPhase _phase = SessionPhase.Idle;
     private float _phaseStart;
+    private bool _hasVisitedStartThisPhase;
     private float _retraceTimer;
     private int _questionIndex;
 
@@ -207,6 +208,23 @@ private void Awake()
         _index = -1;
         Debug.Log($"[Session] Participant {participantId}: {_trials.Count} trials.");
         NextTrial();
+    }
+
+    /// <summary>
+    /// Called after a session finishes (Complete) to prepare for the next
+    /// participant without stopping/restarting Play mode: re-suggests the
+    /// participant id from what's now on disk (the session that just finished is
+    /// already written, so this correctly advances past it) and returns to Idle so
+    /// the researcher sees/can adjust the new id and audio mode before Start Session.
+    /// Without this, back-to-back sessions in the same Play session would otherwise
+    /// keep reusing the same participantId that was only ever suggested once, at
+    /// Awake -- every subsequent run would silently log under the same participant.
+    /// </summary>
+    public void ReturnToIdle()
+    {
+        if (_phase != SessionPhase.Complete) return;
+        participantId = SuggestNextParticipantId();
+        SetPhase(SessionPhase.Idle);
     }
 
     // Condition order per RunSettings.conditionOrderMode (Sequential / Random /
@@ -422,6 +440,7 @@ private void Awake()
     {
         _phase = phase;
         _phaseStart = Time.time;
+        _hasVisitedStartThisPhase = false;
         PhaseChanged?.Invoke(phase);
         Debug.Log($"[Session] {(phase == SessionPhase.Idle || phase == SessionPhase.Complete ? "" : $"Trial {TrialNumber}/{TotalTrials} -> ")}{phase}");
     }
@@ -553,9 +572,19 @@ private void Update()
         if (_phase != SessionPhase.Walk && _phase != SessionPhase.Retrace) return;
         if (head == null || pathSampler == null || !pathSampler.IsReady) return;
         if (graphManager != null && graphManager.IsGenerating) return;   // sampler may be stale mid-tween
-        if (Time.time - _phaseStart < autoEndGracePeriod) return;
 
+        // Walk and Retrace both require an actual start-to-end pass. Nothing resets
+        // the participant's *physical* position between phases/trials -- e.g. Retrace
+        // begins with them still standing wherever Walk+Distractor left them, right
+        // near the far end -- so checking only "have they passed the far end" would
+        // fire almost instantly (as soon as the grace period elapses) without them
+        // ever walking anything. Require they've been back near the start at some
+        // point during *this* phase before the far-end check can complete it.
         float d = pathSampler.DistanceAlong(head.position);
+        if (d <= autoEndOvershoot) _hasVisitedStartThisPhase = true;
+
+        if (Time.time - _phaseStart < autoEndGracePeriod) return;
+        if (!_hasVisitedStartThisPhase) return;
         if (d < pathSampler.TotalLength + autoEndOvershoot) return;
 
         if (_phase == SessionPhase.Walk) EndWalk();
@@ -571,8 +600,8 @@ private void Update()
         {
             switch (_phase)
             {
-                case SessionPhase.Idle:
-                case SessionPhase.Complete: StartSession(); break;
+                case SessionPhase.Idle: StartSession(); break;
+                case SessionPhase.Complete: ReturnToIdle(); break;
                 case SessionPhase.Walk: EndWalk(); break;
                 case SessionPhase.Distractor: EndDistractor(); break;
                 case SessionPhase.Retrace: EndRetrace(); break;

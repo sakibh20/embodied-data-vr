@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Embodied-Data-VR -- study analysis pipeline (M16, updated for CSV logging).
+Embodied-Data-VR -- study analysis pipeline (M16, updated for CSV logging; M34
+refactored so the GUI in analysis_gui.py can reuse the same pipeline).
 
 SessionController writes its raw data straight to CSV -- trials.csv,
 value_questions.csv, retracing_log.csv -- one copy of each inside every
@@ -15,6 +16,10 @@ before this per-participant layout existed.
 
 Usage:
     python analyze_study.py <study_data_dir> [--out <out_dir>] [--datasets datasets.json]
+    python analyze_study.py <study_data_dir> --participant p03   # just one participant
+
+For a point-and-click version of this (pick a folder, see the participant list,
+Analyze All / Analyze one at a time) see analysis_gui.py in this same folder.
 
 Inputs (found under <study_data_dir>/<participant>/, as written by SessionController):
     trials.csv          one row per trial: participant_id, condition, audio_cue,
@@ -28,14 +33,33 @@ Inputs (found under <study_data_dir>/<participant>/, as written by SessionContro
                          but available for per-question-type breakdowns).
     --datasets          optional JSON mapping dataset_id -> [values...]. When
                          provided, a normalized retrace-accuracy proxy is computed
-                         (see notes).
+                         (see notes), AND (M31) a PNG plot is generated per trial
+                         under <out_dir>/plots/ comparing the original data's value
+                         profile against what the participant actually retraced --
+                         answers "what did their retrace look like as a graph, next
+                         to the real one". Requires matplotlib; skipped with a note
+                         if it isn't installed (`pip install matplotlib`), or pass
+                         --no-plots to skip on purpose. Defaults to datasets.json
+                         sitting next to this script, if present.
+    --no-plots           skip generating the per-trial retrace-vs-original PNGs even
+                         when matplotlib and --datasets are both available.
+    --participant        only analyze this one participant (e.g. "p03") instead of
+                         every participant folder under study_data_dir.
 
 Outputs (written to --out, default <study_data_dir>/analysis so they never collide
-with Unity's own raw trials.csv sitting alongside them):
+with Unity's own raw trials.csv sitting alongside them; a --participant run defaults
+to <study_data_dir>/analysis/<participant> instead so per-participant re-runs don't
+overwrite the all-participants output):
     analysis_trials.csv      one row per trial: every trials.csv column plus the
                               derived retrace metrics (and recall_pct).
     analysis_conditions.csv  per-condition aggregate (means across all trials).
-    A summary is also printed to stdout.
+    analysis_participant_order.csv  which condition each participant got, in order.
+    summary.csv              the same headline numbers printed to stdout, as a
+                              one-column CSV of report lines, so the "result" of a
+                              run is a plain-text-readable file and not just a
+                              terminal printout.
+    plots/*.png               (M31, when --datasets is available) original vs.
+                              retraced value profile per trial.
 
 Notes on retrace accuracy:
     retracing_log.csv stores the participant's retrace path as world (x, y, z)
@@ -54,6 +78,16 @@ import json
 import math
 import os
 import statistics as stats
+
+try:
+    import matplotlib
+    matplotlib.use("Agg")   # headless: just save PNG files, no display needed
+    import matplotlib.pyplot as plt
+    HAVE_MPL = True
+except ImportError:
+    HAVE_MPL = False
+
+DEFAULT_DATASETS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "datasets.json")
 
 
 def read_csv_rows(path):
@@ -80,6 +114,24 @@ def read_all_rows(study_data_dir, filename):
             continue
         rows.extend(read_csv_rows(os.path.join(entry, filename)))
     return rows
+
+
+def list_participants(study_data_dir):
+    """
+    Participant folder names directly under study_data_dir (e.g. ["p01", "p02"]),
+    sorted, skipping this script's own "analysis" output folder and dotfiles. This
+    is what analysis_gui.py shows in its participant list after you point it at a
+    study data folder -- it mirrors the per-participant layout SessionController
+    itself writes (see StudyDataSummary() in SessionController.cs).
+    """
+    if not os.path.isdir(study_data_dir):
+        return []
+    names = []
+    for entry in sorted(os.listdir(study_data_dir)):
+        full = os.path.join(study_data_dir, entry)
+        if os.path.isdir(full) and entry != "analysis" and not entry.startswith("."):
+            names.append(entry)
+    return names
 
 
 def trial_key(row):
@@ -158,6 +210,47 @@ def retrace_shape_corr(samples, values):
     return pearson(normalize(lat), normalize(values))
 
 
+def save_retrace_plot(path, samples, values, corr, participant_id, order, condition, dataset_id):
+    """
+    Saves a PNG comparing the original dataset's value profile against what the
+    participant actually retraced (M31) -- both resampled to the same number of
+    points and each normalized 0..1 independently, same basis as retrace_shape_corr,
+    so the plotted shapes and the printed correlation number agree. Returns True if a
+    plot was written, False if there wasn't enough retrace data to make one (fewer
+    than 2 usable samples).
+    """
+    if not HAVE_MPL:
+        return False
+    k = len(values)
+    if k < 2:
+        return False
+    lat = resample_lateral(samples, k)
+    if lat is None:
+        return False
+
+    orig_norm = normalize(values)
+    retrace_norm = normalize(lat)
+    xs = list(range(k))
+    corr_label = f"{corr:.2f}" if not math.isnan(corr) else "n/a"
+
+    fig, ax = plt.subplots(figsize=(6, 3.5))
+    ax.plot(xs, orig_norm, color="#3b6fd6", linewidth=2, label="Original data")
+    ax.plot(xs, retrace_norm, color="#e0663c", linewidth=2, linestyle="--", label="Participant retrace")
+    ax.set_xlabel("Point index along the walk")
+    ax.set_ylabel("Normalized value (0-1)")
+    ax.set_ylim(-0.05, 1.05)
+    ax.set_title(
+        f"{participant_id}  trial {order}  {condition}  ({dataset_id})\n"
+        f"shape correlation r = {corr_label}",
+        fontsize=9,
+    )
+    ax.legend(fontsize=8, loc="upper right")
+    fig.tight_layout()
+    fig.savefig(path, dpi=140)
+    plt.close(fig)
+    return True
+
+
 def to_int(row, key, default=0):
     try:
         return int(row.get(key, default) or default)
@@ -165,31 +258,57 @@ def to_int(row, key, default=0):
         return default
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("study_data_dir")
-    ap.add_argument("--out", default=None)
-    ap.add_argument("--datasets", default=None)
-    args = ap.parse_args()
+def run_analysis(study_data_dir, out_dir=None, datasets_path=None, make_plots=True,
+                  participant_id=None, log=print):
+    """
+    Runs the full analysis pipeline: reads trials.csv/retracing_log.csv (across
+    every participant subfolder, or just `participant_id` when given), derives
+    per-trial retrace metrics, writes analysis_trials.csv / analysis_conditions.csv
+    / analysis_participant_order.csv / summary.csv (+ plots/*.png when a datasets
+    file is available), and returns a dict describing what happened. Both main()
+    (the CLI, all participants) and analysis_gui.py (all participants, or one at a
+    time via `participant_id`) call this -- it's the single place the analysis
+    actually happens so the two stay in sync.
 
-    out_dir = args.out or os.path.join(args.study_data_dir, "analysis")
+    `log` is called once per line of the human-readable summary (default: print);
+    analysis_gui.py passes something that appends to its on-screen status box
+    instead.
+    """
+    if out_dir is None:
+        out_dir = os.path.join(study_data_dir, "analysis", participant_id) if participant_id \
+            else os.path.join(study_data_dir, "analysis")
     os.makedirs(out_dir, exist_ok=True)
 
+    if datasets_path is None and os.path.exists(DEFAULT_DATASETS_PATH):
+        datasets_path = DEFAULT_DATASETS_PATH
     datasets = {}
-    if args.datasets and os.path.exists(args.datasets):
-        with open(args.datasets) as f:
+    if datasets_path and os.path.exists(datasets_path):
+        with open(datasets_path) as f:
             datasets = json.load(f)
 
-    trials = read_all_rows(args.study_data_dir, "trials.csv")
+    trials = read_all_rows(study_data_dir, "trials.csv")
+    if participant_id:
+        trials = [t for t in trials if t.get("participant_id") == participant_id]
     if not trials:
-        print(f"No trials.csv found (or it's empty) under {args.study_data_dir} "
-              f"(checked the flat layout and every participant subfolder)")
-        return
-    retrace_rows = read_all_rows(args.study_data_dir, "retracing_log.csv")
+        msg = (f"No trials.csv rows found under {study_data_dir}"
+               + (f" for participant {participant_id}" if participant_id else
+                  " (checked the flat layout and every participant subfolder)"))
+        log(msg)
+        return {"ok": False, "message": msg}
+
+    retrace_rows = read_all_rows(study_data_dir, "retracing_log.csv")
+    if participant_id:
+        retrace_rows = [r for r in retrace_rows if r.get("participant_id") == participant_id]
 
     retrace_by_trial = {}
     for r in retrace_rows:
         retrace_by_trial.setdefault(trial_key(r), []).append(r)
+
+    do_plots = HAVE_MPL and bool(datasets) and make_plots
+    plots_dir = os.path.join(out_dir, "plots")
+    if do_plots:
+        os.makedirs(plots_dir, exist_ok=True)
+    n_plots = 0
 
     rows = []
     for t in trials:
@@ -199,6 +318,14 @@ def main():
         corr = float("nan")
         if ds in datasets:
             corr = retrace_shape_corr(samples, datasets[ds])
+            if do_plots:
+                pid = t.get("participant_id", "p??")
+                order = to_int(t, "presentation_order")
+                cond = t.get("condition", "")
+                fname = f"{pid}_t{order:02d}_{cond}.png"
+                plot_path = os.path.join(plots_dir, fname)
+                if save_retrace_plot(plot_path, samples, datasets[ds], corr, pid, order, cond, ds):
+                    n_plots += 1
 
         recall_total = to_int(t, "recall_total")
         recall_correct = to_int(t, "recall_score")
@@ -273,18 +400,80 @@ def main():
         w.writerows(order_rows)
 
     n_part = len({t.get("participant_id") for t in trials})
-    print(f"Parsed {n_part} participant(s), {len(rows)} trial(s).")
-    print()
-    print("Per-condition recall (mean % correct):")
+
+    summary_lines = []
+    summary_lines.append(f"Parsed {n_part} participant(s), {len(rows)} trial(s).")
+    summary_lines.append("")
+    summary_lines.append("Per-condition recall (mean % correct):")
     for c in cond_rows:
-        print(f"  {c['condition']:16s} n={c['n_trials']:2d}  "
-              f"recall={c['recall_pct_mean']:5.1f}% (sd {c['recall_pct_sd']:.1f})  "
-              f"retrace_len={c['retrace_len_mean']:.2f}")
-    print()
-    print("Condition order per participant:")
+        summary_lines.append(
+            f"  {c['condition']:16s} n={c['n_trials']:2d}  "
+            f"recall={c['recall_pct_mean']:5.1f}% (sd {c['recall_pct_sd']:.1f})  "
+            f"retrace_len={c['retrace_len_mean']:.2f}"
+        )
+    summary_lines.append("")
+    summary_lines.append("Condition order per participant:")
     for o in order_rows:
-        print(f"  {o['participant_id']:6s} ({o['n_trials']} trial(s)): {o['condition_order']}")
-    print(f"\nWrote:\n  {trials_out}\n  {conds_out}\n  {order_out}")
+        summary_lines.append(f"  {o['participant_id']:6s} ({o['n_trials']} trial(s)): {o['condition_order']}")
+
+    wrote_lines = [trials_out, conds_out, order_out]
+    if do_plots:
+        wrote_lines.append(f"{plots_dir}/  ({n_plots} retrace-vs-original PNG(s))")
+    elif not datasets:
+        summary_lines.append("")
+        summary_lines.append("(No retrace-vs-original plots: no datasets.json found -- "
+                              "pass --datasets datasets.json to enable them.)")
+    elif not HAVE_MPL:
+        summary_lines.append("")
+        summary_lines.append("(No retrace-vs-original plots: matplotlib isn't installed "
+                              "-- `pip install matplotlib`.)")
+
+    summary_out = os.path.join(out_dir, "summary.csv")
+    with open(summary_out, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["info"])
+        for line in summary_lines:
+            w.writerow([line])
+    wrote_lines.append(summary_out)
+
+    for line in summary_lines:
+        log(line)
+    log("")
+    log("Wrote:\n  " + "\n  ".join(wrote_lines))
+
+    return {
+        "ok": True,
+        "out_dir": out_dir,
+        "trials_csv": trials_out,
+        "conditions_csv": conds_out,
+        "order_csv": order_out,
+        "summary_csv": summary_out,
+        "plots_dir": plots_dir if do_plots else None,
+        "n_participants": n_part,
+        "n_trials": len(rows),
+        "n_plots": n_plots,
+    }
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("study_data_dir")
+    ap.add_argument("--out", default=None)
+    ap.add_argument("--datasets", default=None,
+                     help="Defaults to datasets.json next to this script, if present.")
+    ap.add_argument("--no-plots", action="store_true",
+                     help="Skip generating per-trial retrace-vs-original PNGs.")
+    ap.add_argument("--participant", default=None,
+                     help="Only analyze this one participant (e.g. p03) instead of everyone.")
+    args = ap.parse_args()
+
+    run_analysis(
+        args.study_data_dir,
+        out_dir=args.out,
+        datasets_path=args.datasets,
+        make_plots=not args.no_plots,
+        participant_id=args.participant,
+    )
 
 
 if __name__ == "__main__":

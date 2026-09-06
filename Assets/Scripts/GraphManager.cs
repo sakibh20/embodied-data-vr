@@ -73,6 +73,15 @@ public class GraphManager : MonoBehaviour
 
         _isGenerating = true;
 
+        // Nothing else marks the sampler stale for the NEW graph: without this, a
+        // participant's cues (WalkValueDriver gates only on PathSampler.IsReady) and
+        // SessionController.CheckAutoEndOfPhase could still react against the PREVIOUS
+        // trial's geometry for the ~2s the graph spends flipping/resizing into place
+        // below (align + resize run AFTER _isGenerating used to go false -- see the
+        // FinishGeneration note) -- confirmed as the cause of feedback sometimes
+        // starting before the graph had visually settled. See ROADMAP.md M36.
+        if (pathSampler != null) pathSampler.Clear();
+
         ResetGraph();
         Generate();
     }
@@ -172,7 +181,12 @@ public class GraphManager : MonoBehaviour
                 gridGenerator.GenerateGrid(graphData, settings, graphRoot);
             }
 
-            _isGenerating = false;
+            // _isGenerating no longer clears here: StartAlignment() (called just above,
+            // via AppendCallback) kicks off its own independent rotate/resize sequence
+            // that is NOT joined to this one, so this OnComplete fired ~2s before the
+            // graph was actually done flipping/resizing/re-centring -- FinishGeneration()
+            // (called once alignment + resize + ConfigureSampler all genuinely finish)
+            // is what clears it now. See ROADMAP.md M36.
         });
     }
     
@@ -246,7 +260,7 @@ public class GraphManager : MonoBehaviour
     // walking/retracing is unchanged (PathSampler is reconfigured from final positions).
     private void ApplyGraphSizeAndCentre()
     {
-        if (_spawnedDots.Count == 0) { ConfigureSampler(); return; }
+        if (_spawnedDots.Count == 0) { FinishGeneration(); return; }
 
         // Local bounds of the dots. Walk axis is local X (before the flat-lay flip).
         Bounds lb = new Bounds(_spawnedDots[0].transform.localPosition, Vector3.zero);
@@ -267,7 +281,17 @@ public class GraphManager : MonoBehaviour
         Sequence resize = DOTween.Sequence();
         resize.Join(graphRoot.DOScale(Vector3.one * s, scaleTweenDuration).SetEase(Ease.OutCubic));
         resize.Join(graphRoot.DOMove(targetPos, scaleTweenDuration).SetEase(Ease.OutCubic));
-        resize.OnComplete(ConfigureSampler);
+        resize.OnComplete(FinishGeneration);
+    }
+
+    // The graph is only truly "settled" once it has (re)pointed the sampler at its
+    // final, post-resize geometry -- so IsGenerating now stays true until here, not
+    // until the earlier dot-spawn sequence finishes (that left ~2s of alignment/resize
+    // tweening still running with IsGenerating already false). See ROADMAP.md M36.
+    private void FinishGeneration()
+    {
+        ConfigureSampler();
+        _isGenerating = false;
     }
 
     // Point the sampler at the graph's final geometry. Reads the segment length from

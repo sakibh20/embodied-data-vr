@@ -32,10 +32,12 @@ public class SessionBootstrap : MonoBehaviour
     [SerializeField] private AudioModeSelector audioModeSelector;
     [SerializeField] private SessionController session;
 
-    [Tooltip("Start the session automatically once the rig/audio setup is applied. " +
-             "Turn off if you want to press the in-scene Start Session button/Enter " +
-             "key instead (e.g. quick desktop debugging).")]
-    [SerializeField] private bool autoStartSession = true;
+    [Tooltip("Start the session automatically once the rig/audio setup is applied, " +
+             "skipping the Idle screen. Off by default so every fresh Play (not just " +
+             "the screen shown after \"Next Participant\") gives the researcher a " +
+             "chance to confirm/adjust the participant ID and audio mode before the " +
+             "first trial begins -- see ROADMAP.md M33.")]
+    [SerializeField] private bool autoStartSession = false;
 
     private void Awake()
     {

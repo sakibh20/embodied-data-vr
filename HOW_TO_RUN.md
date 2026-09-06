@@ -1,7 +1,7 @@
 # How to Run — Embodied-Data-VR
 
 > Step-by-step guide to open, run, and collect data. See `PROJECT_DESCRIPTION.md` for
-> how it works, `XR_MODE_SWITCHING.md` for mode details. Last updated: 2026-09-06.
+> how it works, `XR_MODE_SWITCHING.md` for mode details. Last updated: 2026-09-06 (M36).
 
 ---
 
@@ -20,8 +20,12 @@
 
 1. Unity Hub → **Add** → select this project folder → open with **6000.3.10f1**.
 2. Open the scene **`Assets/Scenes/Experiment.unity`** and press **Play**.
-   `SessionBootstrap` applies your `RunSettings` (see §2) and starts the session
-   automatically — no extra setup needed.
+   `SessionBootstrap` applies your `RunSettings` (see §2) and stops at the **Idle**
+   screen (M34) — confirm/adjust the participant ID and audio mode (§4), then click
+   **Start Session**. (To go back to the old M20 behavior of starting immediately with
+   no confirm step, check `autoStartSession` on the `Bootstrap` object's
+   `SessionBootstrap` component — off is the default so a fresh Play always gives you a
+   chance to check the participant ID before the first trial begins.)
 3. Wait for compile/import to finish (no errors in the Console).
 
 ---
@@ -117,6 +121,22 @@ participants).
 
 ## 5. Where the data goes
 
+**When does Retrace happen?** Once per trial, right after Distractor and before Recall
+-- every trial is always `Walk -> Distractor -> Retrace -> Recall`. In Retrace the graph
+is hidden (line/dots off, cues forced to Control) and the participant walks the same
+corridor again from memory, trying to reproduce the shape they just walked in Walk; it
+ends automatically once they walk all the way from the start to the far end again, same
+as Walk itself. (M33: fixed a bug where this could auto-complete almost instantly if the
+participant was still standing near the far end from the previous phase, instead of
+requiring them to actually walk it -- if you're looking at data collected before this
+fix, `retrace_seconds` stuck at ~0.5s and only 5-6 samples in `retracing_log.csv` per
+trial is that bug, not a data-collection mistake on your part.) Since M33 means the
+participant now genuinely needs to walk back to the start before retracing, M36 added an
+on-screen instruction telling them so ("Walk back to the start, then retrace the shape
+you just walked -- from memory.") for a few seconds at the start of Retrace, which then
+hides itself the same way it always has -- no cue feedback plays during Retrace either
+way, since the condition is forced to Control the moment Distractor ends.
+
 Data is written as **CSV**, incrementally (a row is appended the moment it happens, not
 batched to the end of the session — so a crash mid-session loses at most the current
 trial). As of M28, **each participant gets their own subfolder** — self-contained, so you
@@ -151,21 +171,58 @@ backward compatibility.)
 
 ## 6. Analyse the data
 
+**Option A — GUI (M35, no command line needed):**
+
 ```bash
 cd Analysis
-python analyze_study.py <path_to_StudyData_folder> --datasets datasets.json
+python analysis_gui.py
 ```
 
-The script reads `trials.csv` and `retracing_log.csv` from every participant subfolder
-under that folder and concatenates them (no more JSON parsing). Outputs go to
-`<StudyData_folder>/analysis/` by
-default (pass `--out <dir>` to change it) — deliberately a subfolder, so the script's own
-outputs never collide with Unity's raw `trials.csv` sitting next to it:
-- `analysis_trials.csv` — every raw `trials.csv` column, plus recall %, retrace path
-  length/duration/spread, and a retrace shape-correlation proxy (when `--datasets` is given).
-- `analysis_conditions.csv` — per-condition mean recall % + SD, mean retrace length.
+1. **Choose Folder...** and pick your `StudyData` folder — the participant list fills in.
+2. Either click **Analyze All**, or select one participant in the list and click
+   **Analyze Selected Participant**.
+3. Progress and the final summary print into the log box; click **Open Last Output
+   Folder** to see the results (plots + CSVs, same as Option B below). Output defaults
+   to `<StudyData_folder>/analysis/` for "Analyze All" and
+   `<StudyData_folder>/analysis/<participant>/` for a single participant (so re-running
+   one participant never overwrites the all-participants results); "Choose Output..."
+   overrides this.
 
-A summary is also printed to the console.
+Requires `tkinter` (bundled with most Python installs on Windows/macOS) and, optionally,
+`matplotlib` for the PNG plots (skipped with a note if it isn't installed).
+
+**Option B — command line:**
+
+```bash
+cd Analysis
+python analyze_study.py <path_to_StudyData_folder>
+python analyze_study.py <path_to_StudyData_folder> --participant p03   # just one participant
+```
+
+`datasets.json` (next to the script) is picked up automatically since M35 — pass
+`--datasets <file>` only if you want a different one.
+
+Either way, the script reads `trials.csv` and `retracing_log.csv` from every participant
+subfolder under that folder and concatenates them (no more JSON parsing; or, with
+`--participant`/a GUI single-participant run, filters down to just that one). Outputs go
+to `<StudyData_folder>/analysis/` by default (pass `--out <dir>` to change it) —
+deliberately a subfolder, so the script's own outputs never collide with Unity's raw
+`trials.csv` sitting next to it:
+- `analysis_trials.csv` — every raw `trials.csv` column, plus recall %, retrace path
+  length/duration/spread, and a retrace shape-correlation proxy (when a datasets file is
+  available).
+- `analysis_conditions.csv` — per-condition mean recall % + SD, mean retrace length.
+- `analysis_participant_order.csv` — which condition each participant got, in order
+  (M30) — e.g. `p01,5,Control -> Abstract -> Representative -> SemanticAudio -> SemanticVisual`.
+- `summary.csv` (M35) — the same headline numbers below, as a plain one-column CSV, so
+  the "result" of a run is a file you can open and read, not just a console printout.
+- `plots/<participant>_t<order>_<condition>.png` (M32) — one PNG per trial plotting the
+  original dataset's value profile against what the participant actually retraced, titled
+  with the shape-correlation number. Generated automatically when a datasets file is
+  available and `matplotlib` is installed (`pip install matplotlib` if it's missing);
+  pass `--no-plots` to skip them on purpose.
+
+A summary is also printed to the console (and, in the GUI, to the log box).
 
 ### Regenerate `datasets.json` (only if the GraphData assets change)
 In Unity, enter Play (or edit) mode and run this via any editor script / the console:

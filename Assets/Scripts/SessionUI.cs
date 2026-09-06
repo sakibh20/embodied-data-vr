@@ -41,6 +41,13 @@ public class SessionUI : MonoBehaviour
     [SerializeField] private Vector3 localOffset = new Vector3(0f, 0.15f, 2f);
     [SerializeField] private float canvasScale = 0.0025f;
 
+    [Header("Retrace")]
+    [Tooltip("How long the \"walk back to the start, then retrace\" instruction stays " +
+             "on screen at the start of Retrace before the panel hides itself (same as " +
+             "Walk) so it doesn't occlude the floor while the participant actually " +
+             "retraces. See ROADMAP.md M36.")]
+    [SerializeField] private float retraceInstructionSeconds = 4f;
+
     private SessionCanvasView _view;
     private readonly List<GameObject> _items = new List<GameObject>();
 
@@ -74,14 +81,28 @@ public class SessionUI : MonoBehaviour
 
     private void Render(SessionPhase phase)
     {
+        CancelInvoke(nameof(HidePanel));   // a pending Retrace auto-hide must never fire into a later phase
         ClearItems();
         if (_view == null) return;
 
-        // Walk and Retrace have no interaction (see SessionController.CheckAutoEndOfPhase) --
-        // hide the head-locked panel entirely so it never occludes the floor graph while the
-        // participant is walking/retracing (ROADMAP.md M12). Idle/Distractor/Recall/Complete
-        // all need a real interaction (button or MCQ), so the panel stays visible there.
-        bool showPanel = phase != SessionPhase.Walk && phase != SessionPhase.Retrace;
+        // Walk has no interaction and no instruction -- hidden immediately (unchanged).
+        // Retrace briefly SHOWS an instruction (M36: "walk back to the start, then
+        // retrace") since nothing else tells the participant they need to physically
+        // return to the start before the shape auto-completes (see M33) -- then hides
+        // itself the same way Walk does, so it doesn't occlude the floor graph while
+        // they actually retrace. Idle/Distractor/Recall/Complete all need a real
+        // interaction (button or MCQ), so the panel stays visible there.
+        if (phase == SessionPhase.Retrace)
+        {
+            _view.gameObject.SetActive(true);
+            _view.Title.text = "Retrace";
+            _view.Body.text = "Walk back to the start, then retrace the shape you just " +
+                               "walked -- from memory.";
+            Invoke(nameof(HidePanel), retraceInstructionSeconds);
+            return;
+        }
+
+        bool showPanel = phase != SessionPhase.Walk;
         _view.gameObject.SetActive(showPanel);
         if (!showPanel) return;
 
@@ -130,8 +151,14 @@ public class SessionUI : MonoBehaviour
             case SessionPhase.Complete:
                 _view.Title.text = "Session complete";
                 _view.Body.text = "Thank you! You can remove the headset.";
+                AddOptionButton("Next Participant", () => session.ReturnToIdle());
                 break;
         }
+    }
+
+    private void HidePanel()
+    {
+        if (_view != null) _view.gameObject.SetActive(false);
     }
 
     private static string ModeLabel(CueAudioController.AudioMode m)
