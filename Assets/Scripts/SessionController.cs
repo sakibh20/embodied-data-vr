@@ -87,7 +87,19 @@ private void Awake()
     {
         if (graphManager == null) graphManager = FindAnyObjectByType<GraphManager>();
         if (conditionManager == null) conditionManager = FindAnyObjectByType<ConditionManager>();
-        if (pathSampler == null) pathSampler = FindAnyObjectByType<PathSampler>();
+        if (pathSampler == null)
+        {
+            // Resolve to the SAME PathSampler WalkValueDriver/GraphManager already use,
+            // rather than a blind scene-wide FindAnyObjectByType -- which is ambiguous
+            // (and silently picks the wrong, never-configured one) if any other
+            // PathSampler exists in the scene. Found and fixed live: a stray leftover
+            // "TempSampler" GameObject was exactly that -- CheckAutoEndOfPhase's
+            // !pathSampler.IsReady guard was permanently true against it, so Walk/Retrace
+            // could never auto-complete. See ROADMAP.md M37.
+            var walkDriver = FindAnyObjectByType<WalkValueDriver>();
+            pathSampler = walkDriver != null ? walkDriver.Path : null;
+            if (pathSampler == null) pathSampler = FindAnyObjectByType<PathSampler>();
+        }
 
         // Auto-suggest the next participant ID from what's already in trials.csv,
         // instead of always starting from whatever was last left in the Inspector
@@ -130,6 +142,13 @@ private void Awake()
             ? _result.questions[_questionIndex] : null;
     public int QuestionNumber => _questionIndex + 1;
     public int QuestionCount => _result?.questions.Count ?? 0;
+
+    /// <summary>
+    /// True once the participant has walked back near the start of the corridor
+    /// during TrialComplete -- i.e. the "Start Next Trial" gate (see StartNextTrial)
+    /// is unlocked. Only meaningful while Phase == TrialComplete. See ROADMAP.md M39.
+    /// </summary>
+    public bool ReadyToStartNext { get; private set; }
 
     /// <summary>Participant label as written to CSV ("p01", "p02", ...). Shown/adjusted on the Idle screen.</summary>
     public string ParticipantLabel => $"p{participantId:00}";
@@ -353,6 +372,19 @@ private void Awake()
         Debug.Log("[Session] Complete.");
     }
 
+    /// <summary>
+    /// Called by the UI's "Start Next Trial" button (TrialComplete phase only, and
+    /// only once ReadyToStartNext is true -- see Update) to actually generate and
+    /// begin the next trial. Splitting this out of AdvanceRecall means the next
+    /// graph never starts forming until the participant has physically returned to
+    /// the start and chosen to continue. See ROADMAP.md M39.
+    /// </summary>
+    public void StartNextTrial()
+    {
+        if (_phase != SessionPhase.TrialComplete || !ReadyToStartNext) return;
+        NextTrial();
+    }
+
     // =====================================================================
     // Phase transitions (called by the UI or debug keys)
     // =====================================================================
@@ -428,7 +460,15 @@ private void Awake()
         {
             _result.finishedUtc = DateTime.UtcNow.ToString("o");
             WriteTrialCsv(_result);
-            NextTrial();
+
+            // Don't generate the next trial's graph immediately: the participant is
+            // still standing wherever Recall left them (typically right at the far
+            // end of the corridor they just retraced), so starting generation here
+            // put them in the middle of a new graph forming around them, with no
+            // chance to see it "spawn". Require they walk back near the start first,
+            // then press a button -- see StartNextTrial / Update. See ROADMAP.md M39.
+            ReadyToStartNext = false;
+            SetPhase(SessionPhase.TrialComplete);
         }
         else
         {
@@ -558,8 +598,28 @@ private void Update()
         }
 
         CheckAutoEndOfPhase(head);
+        CheckReadyToStartNext(head);
 
         if (debugKeys) HandleDebugKeys();
+    }
+
+    // TrialComplete: the participant must walk back near the start of the corridor
+    // they just retraced before the "Start Next Trial" button (SessionUI) does
+    // anything -- see StartNextTrial. pathSampler still holds the JUST-FINISHED
+    // trial's geometry here (GenerateGraph/PathSampler.Clear() only runs once
+    // StartNextTrial actually fires), so "near the start" means the same physical
+    // spot the participant started that trial's Walk from. Only re-renders the UI
+    // (via PhaseChanged) on the frame this flips, not every frame. See ROADMAP.md M39.
+    private void CheckReadyToStartNext(Transform head)
+    {
+        if (_phase != SessionPhase.TrialComplete) return;
+        if (head == null || pathSampler == null || !pathSampler.IsReady) return;
+
+        bool nearStart = pathSampler.DistanceAlong(head.position) <= autoEndOvershoot;
+        if (nearStart == ReadyToStartNext) return;
+
+        ReadyToStartNext = nearStart;
+        PhaseChanged?.Invoke(_phase);
     }
 
     // Walk and Retrace have no on-screen UI while they're active (SessionUI hides its
@@ -605,6 +665,7 @@ private void Update()
                 case SessionPhase.Walk: EndWalk(); break;
                 case SessionPhase.Distractor: EndDistractor(); break;
                 case SessionPhase.Retrace: EndRetrace(); break;
+                case SessionPhase.TrialComplete: StartNextTrial(); break;
             }
         }
 

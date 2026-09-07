@@ -1,7 +1,7 @@
 # How to Run — Embodied-Data-VR
 
 > Step-by-step guide to open, run, and collect data. See `PROJECT_DESCRIPTION.md` for
-> how it works, `XR_MODE_SWITCHING.md` for mode details. Last updated: 2026-09-06 (M36).
+> how it works, `XR_MODE_SWITCHING.md` for mode details. Last updated: 2026-09-07 (M43).
 
 ---
 

@@ -49,7 +49,7 @@ public class CueAudioController : MonoBehaviour
     private float _normalized;   // latest walk value, 0..1
     private float _pitch;        // smoothed current pitch
     private float _pulseTimer;   // counts down to the next pulse
-    private bool _muted;         // gated off while the participant is off the walk
+    private bool _muted = true;  // gated off while the participant is off the walk -- starts true (see OnEnable)
 
     public AudioMode Mode => mode;
 
@@ -59,8 +59,18 @@ public class CueAudioController : MonoBehaviour
         _pitch = audioSource.pitch;
     }
 
-    // Runs whenever the condition is activated (its GameObject is enabled).
-    private void OnEnable() => ConfigureSource();
+    // Runs whenever the condition is activated (its GameObject is enabled). Always
+    // starts muted: activating a condition is not the same as the participant being
+    // on the walk with a ready PathSampler, and nothing else re-mutes a REUSED
+    // condition object (trialsPerCondition > 1) between trials -- without this reset
+    // it could still be unmuted from the end of its previous activation. Region
+    // gating (WalkValueDriver -> ConditionManager.SetCuesActive -> SetMuted(false))
+    // is what should turn it back on. See ROADMAP.md M38.
+    private void OnEnable()
+    {
+        _muted = true;
+        ConfigureSource();
+    }
 
     private void OnDisable()
     {
@@ -106,7 +116,11 @@ public class CueAudioController : MonoBehaviour
 
         if (continuous)
         {
-            if (clip != null && !audioSource.isPlaying) audioSource.Play();
+            // Never auto-start playback while muted -- OnEnable calls this before the
+            // participant has been confirmed on the walk (see OnEnable above); only
+            // SetMuted(false) (i.e. WalkValueDriver's region check saying "yes,
+            // they're on it") should ever start audio.
+            if (clip != null && !_muted && !audioSource.isPlaying) audioSource.Play();
         }
         else
         {

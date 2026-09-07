@@ -38,6 +38,22 @@ public class CueConditionController : ConditionBase
         if (audioController == null) audioController = GetComponent<CueAudioController>();
     }
 
+    // Always start gated off when this condition (re)activates -- activating a
+    // condition is not the same as the participant being confirmed on the walk.
+    // Without this, a condition reused across trials (trialsPerCondition > 1) could
+    // inherit _cuesActive=true left over from the END of its previous activation
+    // (SetCuesActive's own equality guard would then treat the next real
+    // SetCuesActive(true) call as a no-op). WalkValueDriver's region check is what
+    // should turn cues back on. See ROADMAP.md M38 (found via the matching
+    // CueAudioController bug -- same root cause, different component).
+    private void OnEnable()
+    {
+        _cuesActive = false;
+        _lastValue = -1f;
+        densityController?.Clear();
+        audioController?.SetMuted(true);
+    }
+
     private void Update()
     {
         // Cues run only while on the walk; when gated off, drive nothing.

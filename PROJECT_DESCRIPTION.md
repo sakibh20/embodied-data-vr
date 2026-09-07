@@ -4,7 +4,7 @@
 > objects, changed constants, new conditions, etc.). Companion files:
 > `ROADMAP.md` (milestones/status), `HOW_TO_RUN.md` (run steps),
 > `XR_MODE_SWITCHING.md` (desktop / simulator / headset).
-> Last updated: 2026-09-06 (M36).
+> Last updated: 2026-09-07 (M43).
 
 ---
 
@@ -33,13 +33,41 @@ offset/height), then reconstruct it from memory. We test whether adding sensory
 
 ### The four phases per trial (`SessionPhase`)
 
-`Walk` → `Distractor` → `Retrace` → `Recall`, repeated for every trial, then `Complete`.
+`Walk` → `Distractor` → `Retrace` → `Recall` → `TrialComplete`, repeated for every trial,
+then `Complete`.
 
 - **Walk** — participant walks the graph; cues play; the graph line/dots are visible.
 - **Distractor** — count backwards from a random number (300–999) in 3s (working-memory wipe).
 - **Retrace** — graph hidden, cues removed (forced to `Control`); participant re-walks the
   shape from memory; their floor path is sampled.
 - **Recall** — 4 multiple-choice questions about the data.
+- **TrialComplete** (M39) — the last question has been answered and the trial's CSV row is
+  already written, but the *next* trial's graph does not start generating yet: the
+  participant must walk back near the **Start** floor marker (`SessionController.
+  CheckReadyToStartNext`) before `SessionUI` offers a "Start Next Trial" button
+  (`SessionController.StartNextTrial`). Keeps the next graph from forming around the
+  participant while they're still standing at the far end of the previous corridor.
+
+Floor **Start**/**End** markers (a coloured rectangle + `TextMeshPro` label lying flat
+on the ground, `EndpointMarkers.cs`, M39/M40) mark both ends of the current trial's walk
+corridor — placed once `GraphManager` finishes generating/aligning, and left in place
+through Walk/Distractor/Retrace/TrialComplete (they're what "walk back to the start"
+above actually means physically). Pure world-space geometry, so it needs no VR-specific
+handling — same reason the floor graph itself works across desktop/simulator/VR.
+Anchored on **`ExperimentArea`** — the room-area rectangle, i.e. the cyan square you
+see as its Scene-view gizmo (`ExperimentArea.OnDrawGizmos`) — not on the graph or
+`PathSampler` at all (M43). Width = `area.Width`, centred on `area.Center`, positioned
+outside the area's own near/far edge (`area.Depth / 2` from its centre). Three earlier
+attempts anchored on the graph instead and all looked subtly wrong for the same
+underlying reason (the graph's own extent/centroid isn't the same rectangle as the
+room area): M40 anchored on the value=0 baseline (only matches the corridor's
+centreline when a dataset is 0 at that end); M41 fixed the "straddling the graph"
+overlap but still anchored on dot0/dotN; M42 made both markers mutually consistent
+(anchored purely on dot0, matching `PathSampler`'s own single-reference corridor
+model) but that still isn't the same rectangle as `ExperimentArea`, since the graph is
+centred on the area using the *centroid* of every point's value, not dot0 specifically.
+`PathSampler.RegionMargin` is still used for the marker's own thickness (how far
+outside the zone it sits) — that part was never what was broken.
 
 ### What is measured (written incrementally to CSV — see §6)
 
@@ -86,7 +114,7 @@ ROADMAP.md, HOW_TO_RUN.md, XR_MODE_SWITCHING.md, PROJECT_DESCRIPTION.md
 | `SessionController` | `SessionController` | Orchestrates the whole session (trials, phases, logging). |
 | `ConditionManager` | `ConditionManager`, `AudioModeSelector`, `VolumeController` | Activates exactly one condition; routes the walk value to it; global audio mode + volume. |
 | `ExperimentController` | `ExperimentController` | Operator control surface (condition/audio/regenerate). Keyboard shortcuts **off** by default (would clash with SessionController debug keys). |
-| `GraphManager` | `GraphManager` | Builds/animates the graph, flat-lays + scales it, configures `PathSampler`. |
+| `GraphManager` | `GraphManager` | Builds/animates the graph, flat-lays + scales it, configures `PathSampler`, places the floor Start/End markers (M39-M43). |
 | `Grid` | `GridGenerator` | Draws the reference grid (one cross-line per data point + baseline). |
 | `WalkSystem` | `WalkValueDriver`, `PathSampler` | Reads the head position → data value → drives cues. |
 | `GraphRoot` | — | Parent transform everything (line, dots, grid) is built under. |
@@ -243,7 +271,18 @@ affect study results.
   at some point during the *current* Retrace before the far-end check can complete it —
   see M33 in ROADMAP.md.
 - During `Retrace`, the head's ground position `(x, z)` is sampled every
-  **`retraceSampleInterval = 0.1 s`** into `retracePath`.
+  **`retraceSampleInterval = 0.1 s`** into `retracePath` — i.e. 10 samples/sec.
+  **Against the sources-folder data notes doc (M39):** its footnote on File 3
+  (`retracing_log.csv`) says a trajectory/heatmap reconstruction needs "once per frame,
+  or at the very least once per second." The current 10 Hz already comfortably clears
+  that stated minimum; the doc's *ideal* is once per frame (~60 Hz on most headsets),
+  which this project doesn't currently need for anything (no in-VR heatmap/trajectory
+  visualization is built) but is a one-line change (`retraceSampleInterval`, or `0` to
+  sample every `Update()`) if finer-grained analysis ever calls for it — the tradeoff is
+  proportionally more `retracing_log.csv` rows per trial. The written columns already
+  match the doc's File 3 schema (`participant_id/condition/audio_cue/visual_cue/
+  dataset_id/timestamp/head_x/head_y/head_z`), plus two extras (`presentation_order`,
+  `t_seconds`).
 - **Study impact / data gap:** `retracing_log.csv` stores the path but **not** the graph
   geometry, so absolute retrace accuracy can't be recovered from the log alone.
   `analyze_study.py` gives a normalised shape-correlation *proxy* via `datasets.json`
@@ -337,6 +376,75 @@ affect study results.
   fire against stale data while the new graph was still visibly flipping/resizing.
   `PathSampler.Clear()` now runs at the start of every generation, and `IsGenerating`
   only clears once the sampler is actually reconfigured against the final geometry.
+- ~~**Walk/Retrace never auto-ended in a live session**~~ RESOLVED (M37): found live
+  (user still in Play mode) -- `SessionController.pathSampler`'s auto-resolve
+  (`FindAnyObjectByType<PathSampler>()`, M27) had picked a stray leftover `TempSampler`
+  GameObject instead of the real `WalkSystem` sampler `GraphManager` actually
+  configures, so `pathSampler.IsReady` was permanently false on `SessionController`'s
+  copy and `CheckAutoEndOfPhase` returned every frame -- no amount of walking ended
+  the phase. The stray object turned out to be Play-mode-only (not in the saved
+  scene), but the underlying ambiguity was real: `SessionController` now resolves via
+  `WalkValueDriver.Path` (the same instance cues already use) instead of a blind
+  scene-wide search, so any future stray `PathSampler` can't get silently picked
+  again.
+- ~~**Audio/density cues fired the instant a condition activated, regardless of
+  region**~~ RESOLVED (M38): found live -- after finishing Control + Retrace + recall,
+  the next trial's condition activated and its audio cue started playing immediately,
+  even though the participant was nowhere near the walk (it self-silenced once graph
+  generation finished). Root cause: `CueAudioController.OnEnable()` unconditionally
+  called `ConfigureSource()`, which for continuous/pitch-carrying audio modes called
+  `audioSource.Play()` regardless of mute/region state -- `_muted` defaulted to `false`
+  and nothing reset it on activation. This bug predates M36/M37 but was previously
+  masked: before M36, `PathSampler` stayed stale-"ready" across the trial boundary, so
+  `WalkValueDriver` re-muted it again within a frame or two. M36's fix (correctly
+  keeping the sampler "not ready" for the full ~2.5s the graph is generating/settling)
+  made the pre-existing gap long enough to actually hear. `CueConditionController` had
+  the same latent gap for the density visual (`_cuesActive` defaulted `true`, never
+  reset on activation) -- not yet reported but same root cause, fixed defensively.
+  `CueAudioController` now starts `_muted = true` and resets it on every `OnEnable`;
+  `ConfigureSource()` never plays while muted. `CueConditionController.OnEnable()` now
+  resets `_cuesActive = false` (clearing density, muting audio), so a condition reused
+  across trials can't inherit an unmuted state from its previous activation either.
+- ~~**Next trial's graph generated the instant the last recall question was
+  answered**~~ RESOLVED (M39): the participant was still standing wherever Recall left
+  them (often the far end of the corridor), so the next graph would start forming
+  around them with no walk back to the start first. A new `SessionPhase.TrialComplete`
+  now sits between Recall and the next Walk: `SessionUI` shows a "walk back to the
+  Start marker" message until `SessionController.CheckReadyToStartNext` confirms the
+  participant is actually back near the start, then swaps in a "Start Next Trial"
+  button that calls `SessionController.StartNextTrial()`.
+- ~~**No physical landmark for where the walk starts/ends**~~ RESOLVED (M39): added
+  `EndpointMarkers.cs` -- a floor ring + "Start"/"End" `TextMeshPro` label at each end
+  of the corridor, placed by `GraphManager` once the graph settles and cleared before
+  the next trial's graph generates. Pure world-space geometry (no screen-space UI), so
+  it needs no separate VR handling.
+- ~~**Start/End markers landed off-centre (left/right of the corridor)**~~ RESOLVED
+  (M40): they were anchored on the graph's value=0 baseline, which is only the
+  corridor's true centreline when a dataset happens to have exactly 0 at that end.
+  Now anchored on `PathSampler`'s own d=0/d=TotalLength points (dot 0's and dot N's
+  actual final positions), which by construction always sit exactly on the real
+  centreline. Also changed the marker shape from a ring to a rectangle sized to the
+  actual walkable zone (`2 x RegionHalfWidth` wide, `2 x RegionMargin` deep along the
+  walk), both now exposed as public properties on `PathSampler`.
+- ~~**Start/End markers straddled the graph's own start/end instead of the zone
+  boundary**~~ RESOLVED (M41): reported live with an annotated screenshot -- the
+  markers (M40) were centred on dot0/dotN, so half of each sat inside the graph's own
+  walked region rather than at the actual feedback-zone edge. Now anchored on the real
+  zone boundary (`regionMargin` beyond dot0/dotN -- the same point `IsWithinRegion`
+  treats as "off the walk") and positioned entirely outside it, one edge flush with
+  the boundary.
+- ~~**End marker drifted to one side whenever a dataset's first/last values
+  differed**~~ RESOLVED (M42): M41 anchored the End marker on dotN's own position,
+  but `PathSampler` models the whole corridor as a straight line from dot0 along
+  `walkDir` -- dotN's own lateral value is never part of that model, so anchoring on
+  it used a different reference than `IsWithinRegion` itself enforces. Both markers
+  are now derived purely from dot0 walked along `walkDir`, which by definition can
+  never change the lateral coordinate -- so they're lateral-identical for any dataset.
+- ~~**Markers still didn't align with "the zone"**~~ RESOLVED (M43): "the zone" turned
+  out to mean `ExperimentArea`'s own footprint (the cyan Scene-view gizmo), a different
+  rectangle entirely from the graph/`PathSampler` that every earlier attempt (M40-M42)
+  had anchored on. Now derived purely from `ExperimentArea.Center`/`Width`/`Depth`
+  instead of anything graph-derived.
 - **Retrace accuracy data gap** (§4.7): log the value profile for rigorous scoring.
 - **Enum vs object naming** for id 3/4 (§1): cosmetic mismatch.
 - **Counterbalancing dataset correlation** (§4.6): optional decorrelation improvement.

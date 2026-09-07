@@ -24,6 +24,13 @@ public class WalkValueDriver : MonoBehaviour
 
     public void SetActive(bool value) => active = value;
 
+    /// <summary>The PathSampler this driver (and therefore GraphManager) actually
+    /// uses -- exposed so other components (SessionController's auto-resolve) can
+    /// resolve to the SAME instance instead of an ambiguous scene-wide search that
+    /// silently picks the wrong one if any other PathSampler exists in the scene.
+    /// See ROADMAP.md M37.</summary>
+    public PathSampler Path => path;
+
 private void Awake()
     {
         // No longer resolves/caches the head here (see Update) -- PlayerRig.Head is

@@ -148,6 +148,19 @@ public class SessionUI : MonoBehaviour
                 RenderRecall(trialTag);
                 break;
 
+            case SessionPhase.TrialComplete:
+                _view.Title.text = trialTag + "Trial complete";
+                if (session.ReadyToStartNext)
+                {
+                    _view.Body.text = "Nice work! Press Start Next Trial when you're ready to continue.";
+                    AddOptionButton("Start Next Trial", () => session.StartNextTrial());
+                }
+                else
+                {
+                    _view.Body.text = "Trial complete. Walk back to the <b>Start</b> marker to continue.";
+                }
+                break;
+
             case SessionPhase.Complete:
                 _view.Title.text = "Session complete";
                 _view.Body.text = "Thank you! You can remove the headset.";

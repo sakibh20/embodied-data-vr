@@ -27,6 +27,15 @@ public class PathSampler : MonoBehaviour
     public int PointCount => _values.Count;
     public float TotalLength => Mathf.Max(0, PointCount - 1) * _segment;
 
+    /// <summary>Half-width of the walkable corridor (see regionHalfWidth) -- exposed so
+    /// GraphManager/EndpointMarkers can size the floor Start/End markers to match the
+    /// actual walkable zone rather than an arbitrary constant. See ROADMAP.md M40.</summary>
+    public float RegionHalfWidth => regionHalfWidth;
+
+    /// <summary>Slack margin beyond each end still counted as "on the walk" (see
+    /// regionMargin) -- exposed for the same reason as RegionHalfWidth. See ROADMAP.md M40.</summary>
+    public float RegionMargin => regionMargin;
+
     /// <summary>Provide the path geometry. Call after the graph is fully aligned.</summary>
     public void Configure(Vector3 start, Vector3 forward, float segmentLength, IList<float> values)
     {

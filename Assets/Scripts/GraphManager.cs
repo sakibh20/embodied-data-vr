@@ -37,6 +37,7 @@ public class GraphManager : MonoBehaviour
 
     private bool _isGenerating = false;
     private Sequence _generationSequence;
+    private EndpointMarkers _endpointMarkers;
 
     // private void Start()
     // {
@@ -94,6 +95,12 @@ public class GraphManager : MonoBehaviour
             if (dot != null) Destroy(dot.gameObject);
         }
         _spawnedDots.Clear();
+
+        // The previous trial's Start/End floor markers are now stale (new graph,
+        // new corridor) -- clear them here so a participant can never see last
+        // trial's markers while this trial's graph is still generating. The new
+        // pair is placed once ConfigureSampler knows the new corridor's geometry.
+        if (_endpointMarkers != null) _endpointMarkers.Clear();
 
         if (_lineRenderer != null)
         {
@@ -323,5 +330,59 @@ private void ConfigureSampler()
         }
 
         pathSampler.Configure(start, walkDir, segment, graphData.values);
+
+        PlaceEndpointMarkers(walkDir);
+    }
+
+    // Floor "Start"/"End" markers at the two ends of the corridor -- both a visible
+    // landmark while walking (M39: "let the user understand better") and the physical
+    // target SessionController.CheckReadyToStartNext checks against before the next
+    // trial can begin.
+    //
+    // M40 anchored these on the ACTUAL first/last dot positions (dot0/dotN) instead of
+    // the graph's value=0 baseline, which fixed the lateral (lay it on the corridor's
+    // real centreline) but left them straddling dot0/dotN themselves -- i.e. sitting
+    // half inside the graph's own walked region. Reported live: "start and end is
+    // following the start and end of the graph, we dont need that -- just place it
+    // matching the zone's [boundary], and also outside of the zone." The real
+    // "feedback zone" boundary is regionMargin beyond dot0/dotN, not dot0/dotN
+    // themselves (that's the exact point PathSampler.IsWithinRegion's d < -regionMargin
+    // / d > TotalLength + regionMargin check treats as "off the walk") -- so the
+    // markers are now anchored there instead, and EndpointMarkers positions the
+    // rectangle entirely on the OUTSIDE of that boundary (one edge flush with it,
+    // extending further away from the corridor) rather than centred on it. See
+    // ROADMAP.md M41.
+    private void PlaceEndpointMarkers(Vector3 walkDir)
+    {
+        if (_spawnedDots.Count == 0) return;
+        if (_endpointMarkers == null) _endpointMarkers = gameObject.AddComponent<EndpointMarkers>();
+
+        // "The zone" is ExperimentArea's own footprint -- its Scene-view gizmo (the
+        // cyan square, drawn by ExperimentArea.OnDrawGizmos) is literally what the
+        // user has been pointing at in every screenshot. That is NOT the same
+        // rectangle as PathSampler's corridor (regionHalfWidth/regionMargin/dot0):
+        // the graph is centred on the area using the CENTROID of every point's value
+        // (ApplyGraphSizeAndCentre), not dot0 specifically, so dot0's own lateral
+        // position (what M42 anchored both markers on) is generally offset from the
+        // area's actual centre -- confirmed live via a third screenshot showing both
+        // markers shifted well to one side of the cyan zone's own centreline. Both
+        // markers are now derived purely from ExperimentArea instead: width = the
+        // area's own Width (not regionHalfWidth), centred on the area's own Centre
+        // (not dot0), and positioned outside the area's own near/far edge (Depth/2
+        // from its centre) rather than outside the graph's own extent. See
+        // ROADMAP.md M43.
+        if (area == null) area = FindAnyObjectByType<ExperimentArea>();
+        if (area == null) return;   // nothing sensible to size/centre the markers on
+
+        Vector3 dir = walkDir.sqrMagnitude > 0.0001f ? walkDir.normalized : Vector3.forward;
+        float margin = pathSampler != null ? pathSampler.RegionMargin : 0.3f;
+
+        Vector3 startZoneEdge = area.Center - dir * (area.Depth * 0.5f);
+        Vector3 endZoneEdge = area.Center + dir * (area.Depth * 0.5f);
+
+        float halfWidth = area.Width * 0.5f;
+        float halfDepth = margin;
+
+        _endpointMarkers.Show(startZoneEdge, endZoneEdge, dir, halfWidth, halfDepth);
     }
 }
