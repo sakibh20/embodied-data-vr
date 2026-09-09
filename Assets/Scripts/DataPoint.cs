@@ -17,4 +17,15 @@ public class DataPoint : MonoBehaviour
     {
         label.SetText($"{_graphData.prefix} {(_index+1)*_graphData.dataInterval} : {_graphData.values[_index]} {_graphData.unit}");
     }
+
+    /// <summary>
+    /// Blanks the value label instead of showing it. Used for dots that have no
+    /// matching GraphData value to display -- e.g. the retrace-review graph, whose
+    /// points are resampled from the participant's own walked path rather than real
+    /// dataset entries. See ROADMAP.md M44.
+    /// </summary>
+    public void HideLabel()
+    {
+        if (label != null) label.SetText(string.Empty);
+    }
 }

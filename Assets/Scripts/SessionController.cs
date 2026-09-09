@@ -47,6 +47,11 @@ public class SessionController : MonoBehaviour
 
     [Header("Retrace capture")]
     [SerializeField] private float retraceSampleInterval = 0.1f;
+    [Tooltip("Seconds the just-walked path is drawn on the floor (same dot/line style " +
+             "as the real graph) after Retrace ends, before Recall questions begin. " +
+             "Shown only AFTER retrace, never while walking -- Retrace itself stays a " +
+             "pure memory test. See ROADMAP.md M44.")]
+    [SerializeField] private float retraceReviewSeconds = 5f;
 
     [Header("Walk/Retrace auto-end (UI is hidden during these phases -- see SessionUI)")]
     [Tooltip("Metres the participant must walk past the far end of the graph corridor " +
@@ -414,6 +419,26 @@ private void Awake()
         if (_phase != SessionPhase.Retrace) return;
         _result.retraceSeconds = Time.time - _phaseStart;
         WriteRetraceCsv(_result);
+
+        // Briefly show the participant what they just walked, drawn in the same
+        // dot/line style as the real graph, before Recall -- purely a post-hoc review.
+        // Nothing is shown DURING Retrace itself (that stays a pure memory test); this
+        // only fires once Retrace has already ended. See ROADMAP.md M44.
+        graphManager.ShowRetraceGraph(_result.retracePath);
+        SetPhase(SessionPhase.RetraceReview);
+        Invoke(nameof(EndRetraceReview), retraceReviewSeconds);
+    }
+
+    /// <summary>
+    /// Ends the brief post-retrace review (see EndRetrace) and moves on to Recall.
+    /// Normally fires automatically after retraceReviewSeconds; also callable directly
+    /// (e.g. a debug key) to skip ahead. See ROADMAP.md M44.
+    /// </summary>
+    public void EndRetraceReview()
+    {
+        if (_phase != SessionPhase.RetraceReview) return;
+        CancelInvoke(nameof(EndRetraceReview));
+        graphManager.ClearRetraceGraph();
         _questionIndex = 0;
         SetPhase(SessionPhase.Recall);
     }
@@ -665,6 +690,7 @@ private void Update()
                 case SessionPhase.Walk: EndWalk(); break;
                 case SessionPhase.Distractor: EndDistractor(); break;
                 case SessionPhase.Retrace: EndRetrace(); break;
+                case SessionPhase.RetraceReview: EndRetraceReview(); break;
                 case SessionPhase.TrialComplete: StartNextTrial(); break;
             }
         }

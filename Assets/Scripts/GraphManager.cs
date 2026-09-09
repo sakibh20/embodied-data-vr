@@ -39,6 +39,15 @@ public class GraphManager : MonoBehaviour
     private Sequence _generationSequence;
     private EndpointMarkers _endpointMarkers;
 
+    // Retrace-review graph (M44): a second, separate set of dots/line drawing the
+    // participant's OWN walked path in the same visual style as the real graph, shown
+    // briefly after Retrace ends. Kept entirely apart from _spawnedDots/_lineRenderer
+    // above (its own root object) so it can never be mistaken for -- or interfere
+    // with -- the real graph's own state/animations.
+    private readonly List<DataPoint> _retraceDots = new List<DataPoint>();
+    private LineRenderer _retraceLineRenderer;
+    private GameObject _retraceRoot;
+
     // private void Start()
     // {
     //     GenerateGraph();
@@ -384,5 +393,137 @@ private void ConfigureSampler()
         float halfDepth = margin;
 
         _endpointMarkers.Show(startZoneEdge, endZoneEdge, dir, halfWidth, halfDepth);
+    }
+
+    // =====================================================================
+    // Retrace-review graph (M44) -- "while retracing, can we draw a graph using
+    // user's movement? the graph type and logic should follow our original graph."
+    // Per the chosen design (shown only AFTER Retrace ends, so Retrace itself stays a
+    // pure memory test with nothing visible while walking): SessionController calls
+    // ShowRetraceGraph right after Retrace finishes, briefly, before Recall begins.
+    // =====================================================================
+
+    /// <summary>
+    /// Draws the participant's just-completed retrace path as a dot+line graph, in the
+    /// same visual style as the real graph (same dataPoint prefab, same LineRenderer
+    /// look) and using the SAME point spacing/count as the real dataset -- so the two
+    /// are directly comparable at a glance. Reuses `pathSampler` as it stands right
+    /// after this trial's real graph was configured (SessionController.EndRetrace calls
+    /// this before GenerateGraph runs again for the next trial, so pathSampler still
+    /// holds THIS trial's start/direction/spacing -- see the CheckReadyToStartNext note
+    /// above for the same assumption elsewhere).
+    ///
+    /// Retrace samples are raw head positions (world x/y/z, y = head height) -- unlike
+    /// the real graph, whose "value" axis is a LATERAL floor offset with every dot
+    /// sitting at floor height (see PROJECT_DESCRIPTION Sec.1). So each resampled point
+    /// keeps the retrace path's own lateral (x/z) position but is dropped to the real
+    /// graph's dot height, rather than floating at head height -- that's what makes the
+    /// two graphs visually comparable (same plane) instead of one hovering above the other.
+    /// </summary>
+    public void ShowRetraceGraph(List<RetraceSample> path)
+    {
+        ClearRetraceGraph();
+
+        if (path == null || path.Count == 0) return;
+        if (pathSampler == null || !pathSampler.IsReady) return;
+        if (graphData == null || graphData.values == null || graphData.values.Count == 0) return;
+        if (_spawnedDots.Count == 0) return;   // no real dot to borrow the floor height from
+
+        // Retrace does NOT start the participant at the corridor's start: they begin
+        // wherever Distractor left them (typically standing right near the FAR end,
+        // since that's where Walk finished), and the on-screen instruction then asks
+        // them to walk back to the start before their real retrace attempt to the end.
+        // SessionController samples the WHOLE Retrace phase, including that "walk back
+        // to the start" portion -- so path[0] is usually already past the far end of
+        // the corridor, not at its start. Resampling from path[0] made every target
+        // distance (0..TotalLength) trivially "already reached", collapsing every
+        // point onto that single leftover position (reported live: all dots landed on
+        // top of each other, invisible as a shape). Fixed by first finding the LAST
+        // time the participant was nearest the corridor's start across the whole
+        // path -- the real launching point of their final walk to the end -- and only
+        // resampling the suffix from there forward.
+        int startIndex = 0;
+        float minDist = float.MaxValue;
+        for (int k = 0; k < path.Count; k++)
+        {
+            float d = pathSampler.DistanceAlong(new Vector3(path[k].x, path[k].y, path[k].z));
+            if (d <= minDist) { minDist = d; startIndex = k; }
+        }
+
+        int n = graphData.values.Count;
+        float segment = pathSampler.PointCount > 1
+            ? pathSampler.TotalLength / (pathSampler.PointCount - 1)
+            : pathSampler.TotalLength;
+        float floorY = _spawnedDots[0].transform.position.y;
+
+        _retraceRoot = new GameObject("RetraceGraph");
+        _retraceRoot.transform.SetParent(transform, false);
+
+        GameObject lineObj = new GameObject("RetraceLine");
+        lineObj.transform.SetParent(_retraceRoot.transform, false);
+        _retraceLineRenderer = lineObj.AddComponent<LineRenderer>();
+        _retraceLineRenderer.useWorldSpace = true;
+        _retraceLineRenderer.widthMultiplier = 0.05f;
+        _retraceLineRenderer.positionCount = n;
+        _retraceLineRenderer.material = new Material(Shader.Find("Sprites/Default"));
+
+        for (int i = 0; i < n; i++)
+        {
+            float targetDist = i * segment;
+            Vector3 pos = ResamplePathAtDistance(path, startIndex, targetDist);
+            pos.y = floorY;
+
+            DataPoint dot = Instantiate(dataPoint, _retraceRoot.transform);
+            dot.transform.position = pos;
+            dot.transform.localScale = Vector3.one * settings.dotSize;
+            dot.HideLabel();   // no matching GraphData value to show for a resampled point
+            _retraceDots.Add(dot);
+
+            _retraceLineRenderer.SetPosition(i, pos);
+        }
+    }
+
+    /// <summary>Removes the retrace-review graph, if one is currently shown. Safe to call
+    /// any time (e.g. even if ShowRetraceGraph was never called this trial).</summary>
+    public void ClearRetraceGraph()
+    {
+        foreach (var d in _retraceDots) if (d != null) Destroy(d.gameObject);
+        _retraceDots.Clear();
+
+        if (_retraceRoot != null) Destroy(_retraceRoot);
+        _retraceRoot = null;
+        _retraceLineRenderer = null;
+    }
+
+    // Walks the temporally-ordered retrace path forward FROM startIndex (see the note
+    // in ShowRetraceGraph -- this skips the "walking back to the start" portion at the
+    // beginning of Retrace and only resamples the participant's real, final attempt),
+    // tracking distance-along-walk (via pathSampler.DistanceAlong, the same projection
+    // PathSampler itself uses), and linearly interpolates the world position at the
+    // first point this crosses targetDist. If the participant backtracked during that
+    // final attempt, this reports the FIRST crossing, not the last -- a deliberate
+    // simplification (the review is illustrative, not a precise trajectory replay). If
+    // they stopped short of targetDist entirely, the last sample is used instead of
+    // extrapolating past what they actually walked.
+    private Vector3 ResamplePathAtDistance(List<RetraceSample> path, int startIndex, float targetDist)
+    {
+        Vector3 prevPos = new Vector3(path[startIndex].x, path[startIndex].y, path[startIndex].z);
+        float prevDist = pathSampler.DistanceAlong(prevPos);
+        if (targetDist <= prevDist) return prevPos;
+
+        for (int k = startIndex + 1; k < path.Count; k++)
+        {
+            Vector3 pos = new Vector3(path[k].x, path[k].y, path[k].z);
+            float dist = pathSampler.DistanceAlong(pos);
+            if (dist >= targetDist)
+            {
+                float span = dist - prevDist;
+                float t = span > 0.0001f ? Mathf.Clamp01((targetDist - prevDist) / span) : 0f;
+                return Vector3.Lerp(prevPos, pos, t);
+            }
+            prevPos = pos;
+            prevDist = dist;
+        }
+        return prevPos;   // never reached targetDist -- participant stopped short of it
     }
 }

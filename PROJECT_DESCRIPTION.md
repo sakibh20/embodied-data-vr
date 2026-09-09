@@ -4,7 +4,7 @@
 > objects, changed constants, new conditions, etc.). Companion files:
 > `ROADMAP.md` (milestones/status), `HOW_TO_RUN.md` (run steps),
 > `XR_MODE_SWITCHING.md` (desktop / simulator / headset).
-> Last updated: 2026-09-07 (M43).
+> Last updated: 2026-09-09 (M45).
 
 ---
 
@@ -31,15 +31,26 @@ offset/height), then reconstruct it from memory. We test whether adding sensory
 > labels — behaviour is defined by each condition's serialized fields (prefab, clip,
 > `respondToValue`). Renaming the enum would be cosmetic but touches serialized data.
 
-### The four phases per trial (`SessionPhase`)
+### The phases per trial (`SessionPhase`)
 
-`Walk` → `Distractor` → `Retrace` → `Recall` → `TrialComplete`, repeated for every trial,
-then `Complete`.
+`Walk` → `Distractor` → `Retrace` → `RetraceReview` → `Recall` → `TrialComplete`, repeated
+for every trial, then `Complete`.
 
 - **Walk** — participant walks the graph; cues play; the graph line/dots are visible.
 - **Distractor** — count backwards from a random number (300–999) in 3s (working-memory wipe).
 - **Retrace** — graph hidden, cues removed (forced to `Control`); participant re-walks the
-  shape from memory; their floor path is sampled.
+  shape from memory; their floor path is sampled. Nothing is drawn from this data while
+  they're still walking — Retrace stays a pure memory test.
+- **RetraceReview** (M44) — once Retrace ends, `GraphManager.ShowRetraceGraph` draws the
+  path the participant just walked as a dot+line graph, in the *same* visual style as the
+  real graph (same prefab, same line look, same point count as the dataset) — so it's
+  directly comparable to what they saw during Walk, at a glance, right after they finish
+  retracing rather than during it. Held for `SessionController.retraceReviewSeconds`
+  (default 5s) — either the timer or a debug-key press calls `EndRetraceReview`, which
+  clears the review graph (`GraphManager.ClearRetraceGraph`) and moves on to Recall.
+  Resampling skips the leading part of `retracePath` where the participant is still
+  standing at the far end / walking back to the start (M45) — it only draws their real,
+  final attempt at the corridor, anchored on the last time they were nearest the start.
 - **Recall** — 4 multiple-choice questions about the data.
 - **TrialComplete** (M39) — the last question has been answered and the trial's CSV row is
   already written, but the *next* trial's graph does not start generating yet: the
@@ -75,6 +86,9 @@ Per trial: condition, dataset, phase durations, distractor start number
 (`trials.csv`), the **retrace path** (world x/y/z samples over time,
 `retracing_log.csv`), and the **recall questions** with the chosen answer
 (`value_questions.csv` → recall score). See §6 and `Analysis/analyze_study.py`.
+The retrace path is also what `RetraceReview` (M44, above) draws back on the floor
+right after Retrace ends — same CSV data, just visualised once for the participant
+before Recall, not a separate capture.
 Test/pilot CSV data can be permanently cleared from the Unity Editor menu
 **Tools > Study Data** (see HOW_TO_RUN §7) -- an Editor-only action, not part of
 the in-VR runtime UI.

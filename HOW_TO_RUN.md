@@ -1,7 +1,7 @@
 # How to Run — Embodied-Data-VR
 
 > Step-by-step guide to open, run, and collect data. See `PROJECT_DESCRIPTION.md` for
-> how it works, `XR_MODE_SWITCHING.md` for mode details. Last updated: 2026-09-07 (M43).
+> how it works, `XR_MODE_SWITCHING.md` for mode details. Last updated: 2026-09-09 (M45).
 
 ---
 
@@ -70,8 +70,8 @@ you press Play in `Experiment.unity`.
 1. Press **Play** (with `RunSettings.runType = Desktop`).
 2. The world-space study UI appears. Drive it with:
    - **Mouse** — click the on-screen buttons, **or**
-   - **Debug keys** — **Enter** advances each phase (Walk→Distractor→Retrace→Recall→next);
-     **1–4** answer recall questions.
+   - **Debug keys** — **Enter** advances each phase (Walk→Distractor→Retrace→RetraceReview→
+     Recall→next); **1–4** answer recall questions.
 3. Move the player during Walk/Retrace with the **DesktopWalker** camera (WASD + mouse look)
    so the walk value is driven and the retrace path is captured.
 4. **Audio mode** comes from `RunSettings`; it can still be changed live from the
@@ -122,20 +122,30 @@ participants).
 ## 5. Where the data goes
 
 **When does Retrace happen?** Once per trial, right after Distractor and before Recall
--- every trial is always `Walk -> Distractor -> Retrace -> Recall`. In Retrace the graph
-is hidden (line/dots off, cues forced to Control) and the participant walks the same
-corridor again from memory, trying to reproduce the shape they just walked in Walk; it
-ends automatically once they walk all the way from the start to the far end again, same
-as Walk itself. (M33: fixed a bug where this could auto-complete almost instantly if the
-participant was still standing near the far end from the previous phase, instead of
-requiring them to actually walk it -- if you're looking at data collected before this
-fix, `retrace_seconds` stuck at ~0.5s and only 5-6 samples in `retracing_log.csv` per
-trial is that bug, not a data-collection mistake on your part.) Since M33 means the
-participant now genuinely needs to walk back to the start before retracing, M36 added an
-on-screen instruction telling them so ("Walk back to the start, then retrace the shape
-you just walked -- from memory.") for a few seconds at the start of Retrace, which then
-hides itself the same way it always has -- no cue feedback plays during Retrace either
-way, since the condition is forced to Control the moment Distractor ends.
+-- every trial is always `Walk -> Distractor -> Retrace -> RetraceReview -> Recall`. In
+Retrace the graph is hidden (line/dots off, cues forced to Control) and the participant
+walks the same corridor again from memory, trying to reproduce the shape they just walked
+in Walk; it ends automatically once they walk all the way from the start to the far end
+again, same as Walk itself. (M33: fixed a bug where this could auto-complete almost
+instantly if the participant was still standing near the far end from the previous phase,
+instead of requiring them to actually walk it -- if you're looking at data collected
+before this fix, `retrace_seconds` stuck at ~0.5s and only 5-6 samples in
+`retracing_log.csv` per trial is that bug, not a data-collection mistake on your part.)
+Since M33 means the participant now genuinely needs to walk back to the start before
+retracing, M36 added an on-screen instruction telling them so ("Walk back to the start,
+then retrace the shape you just walked -- from memory.") for a few seconds at the start
+of Retrace, which then hides itself the same way it always has -- no cue feedback plays
+during Retrace either way, since the condition is forced to Control the moment Distractor
+ends.
+
+**RetraceReview (M44):** the moment Retrace ends, the path the participant just walked is
+drawn back on the floor as a dot+line graph -- same visual style as the real graph, same
+number of points as the dataset -- for `SessionController.retraceReviewSeconds` (default
+5s, Inspector-adjustable), then it's cleared automatically and Recall begins. This is
+purely a visualisation of the same `retracePath` data already being written to
+`retracing_log.csv` -- it doesn't change what's recorded, only shows the participant (and
+you, if you're watching) what their retrace actually looked like before they answer the
+recall questions.
 
 Data is written as **CSV**, incrementally (a row is appended the moment it happens, not
 batched to the end of the session — so a crash mid-session loses at most the current

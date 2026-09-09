@@ -47,6 +47,11 @@ public class SessionUI : MonoBehaviour
              "Walk) so it doesn't occlude the floor while the participant actually " +
              "retraces. See ROADMAP.md M36.")]
     [SerializeField] private float retraceInstructionSeconds = 4f;
+    [Tooltip("How long the \"here's what you traced\" panel stays on screen at the start " +
+             "of RetraceReview before hiding itself, so it doesn't block the view of the " +
+             "floor graph for the rest of the review window (SessionController's " +
+             "retraceReviewSeconds). See ROADMAP.md M44.")]
+    [SerializeField] private float retraceReviewPanelSeconds = 2.5f;
 
     private SessionCanvasView _view;
     private readonly List<GameObject> _items = new List<GameObject>();
@@ -99,6 +104,20 @@ public class SessionUI : MonoBehaviour
             _view.Body.text = "Walk back to the start, then retrace the shape you just " +
                                "walked -- from memory.";
             Invoke(nameof(HidePanel), retraceInstructionSeconds);
+            return;
+        }
+
+        // RetraceReview: the floor now shows the participant's own traced shape
+        // (GraphManager.ShowRetraceGraph) -- briefly say so, then get the head-locked
+        // panel out of the way for the rest of the review window so it doesn't occlude
+        // that shape, the same way Retrace's own instruction hides itself. See
+        // ROADMAP.md M44.
+        if (phase == SessionPhase.RetraceReview)
+        {
+            _view.gameObject.SetActive(true);
+            _view.Title.text = "Here's what you traced";
+            _view.Body.text = "Take a look at the shape you just walked -- Recall questions come next.";
+            Invoke(nameof(HidePanel), retraceReviewPanelSeconds);
             return;
         }
 
