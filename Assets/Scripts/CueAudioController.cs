@@ -12,8 +12,8 @@ using UnityEngine;
 /// - Both        → pulses whose rate AND pitch both rise with the value.
 ///
 /// Swap <see cref="clip"/> per condition (generic tone / energy hum / electric).
-/// Set <see cref="respondToValue"/> = false for the static-electric mismatch
-/// condition: the clip then loops at a steady pitch and ignores the walk.
+/// Set <see cref="respondToValue"/> = false to make the clip loop at a steady pitch and
+/// ignore the walk (no study condition uses this since M47 -- all four cue conditions track the data).
 /// </summary>
 [RequireComponent(typeof(AudioSource))]
 public class CueAudioController : MonoBehaviour
@@ -32,7 +32,7 @@ public class CueAudioController : MonoBehaviour
     [SerializeField] private AudioMode mode = AudioMode.Both;
 
     [Tooltip("When false the cue ignores the walk value and plays a steady hum " +
-             "(the static-electric mismatch condition).")]
+             "(not used by any condition since M47).")]
     [SerializeField] private bool respondToValue = true;
 
     [Header("Frequency (pitch) range")]

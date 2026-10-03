@@ -23,6 +23,15 @@ public class PathSampler : MonoBehaviour
     private float _min, _max;
     private bool _ready;
 
+    // Value axis (M46): the graph lies flat, so the data VALUE is a lateral floor
+    // offset perpendicular to the walk axis. Derived purely from the final dot
+    // positions (not from GraphManager's rotation maths), so it stays correct for
+    // any resize / re-centre / ExperimentArea orientation and for whichever side the
+    // value happens to grow toward.
+    private Vector3 _valueDir;       // unit, on the ground, perpendicular to _dir, pointing toward HIGHER values
+    private float _latMin, _latMax;  // lateral coordinate (from _start along _valueDir) of the min / max value lines
+    private bool _hasValueAxis;
+
     public bool IsReady => _ready;
     public int PointCount => _values.Count;
     public float TotalLength => Mathf.Max(0, PointCount - 1) * _segment;
@@ -36,23 +45,59 @@ public class PathSampler : MonoBehaviour
     /// regionMargin) -- exposed for the same reason as RegionHalfWidth. See ROADMAP.md M40.</summary>
     public float RegionMargin => regionMargin;
 
-    /// <summary>Provide the path geometry. Call after the graph is fully aligned.</summary>
-    public void Configure(Vector3 start, Vector3 forward, float segmentLength, IList<float> values)
+    /// <summary>True when a lateral value axis could be derived (dot positions were
+    /// supplied and the dataset isn't flat). When false, standing-position feedback
+    /// falls back to the old value-at-progress mapping. See ROADMAP.md M46.</summary>
+    public bool HasValueAxis => _ready && _hasValueAxis;
+
+    /// <summary>Unit ground-plane direction in which the data value increases.</summary>
+    public Vector3 ValueAxis => _valueDir;
+
+    /// <summary>Provide the path geometry. Call after the graph is fully aligned.
+    /// <paramref name="pointPositions"/> (optional, world positions of the dots in the
+    /// same order as <paramref name="values"/>) lets the sampler derive the lateral
+    /// value axis used for standing-position feedback (M46).</summary>
+    public void Configure(Vector3 start, Vector3 forward, float segmentLength, IList<float> values,
+                          IList<Vector3> pointPositions = null)
     {
         _start = start;
-        _dir = forward.sqrMagnitude > 0f ? forward.normalized : Vector3.forward;
+        _dir = forward;
+        _dir.y = 0f;   // walk axis lives on the ground
+        _dir = _dir.sqrMagnitude > 0f ? _dir.normalized : Vector3.forward;
         _segment = segmentLength;
         _values = new List<float>(values);
+        _hasValueAxis = false;
 
         _ready = _values.Count > 0 && _segment > 0f;
         if (!_ready) return;
 
+        int iMin = 0, iMax = 0;
         _min = _max = _values[0];
-        foreach (var v in _values)
+        for (int i = 1; i < _values.Count; i++)
         {
-            if (v < _min) _min = v;
-            if (v > _max) _max = v;
+            if (_values[i] < _min) { _min = _values[i]; iMin = i; }
+            if (_values[i] > _max) { _max = _values[i]; iMax = i; }
         }
+
+        if (pointPositions != null && pointPositions.Count == _values.Count && iMin != iMax)
+            ConfigureValueAxis(pointPositions[iMin], pointPositions[iMax]);
+    }
+
+    // The value axis is the ground-plane direction from the lowest-value dot to the
+    // highest-value dot, with its walk-axis component removed (those two dots also sit
+    // at different points in time). Its two lines -- lateral offsets of the min and the
+    // max dot -- are the 0 and 1 ends of the standing-position feedback.
+    private void ConfigureValueAxis(Vector3 minPos, Vector3 maxPos)
+    {
+        Vector3 v = maxPos - minPos;
+        v.y = 0f;
+        v -= Vector3.Dot(v, _dir) * _dir;
+        if (v.sqrMagnitude < 1e-8f) return;   // degenerate (e.g. no lateral spread) -> fallback
+
+        _valueDir = v.normalized;
+        _latMin = Vector3.Dot(minPos - _start, _valueDir);
+        _latMax = Vector3.Dot(maxPos - _start, _valueDir);
+        _hasValueAxis = _latMax - _latMin > 1e-4f;
     }
 
     public void Clear() => _ready = false;
@@ -72,6 +117,20 @@ public class PathSampler : MonoBehaviour
 
         float d = DistanceAlong(worldPos);
         if (d < -regionMargin || d > TotalLength + regionMargin) return false;
+
+        // With a value axis, the corridor is centred on the middle of the graph's
+        // value band (min line .. max line) instead of on dot 0's own line -- so it
+        // covers both sides of the graph evenly, which matters now that standing
+        // sideways IS the feedback (M46). regionHalfWidth keeps its meaning (metres
+        // either side of the corridor centre line), but is never allowed to be
+        // narrower than the band itself, so the whole graph is always inside.
+        if (_hasValueAxis)
+        {
+            float mid = 0.5f * (_latMin + _latMax);
+            float halfBand = 0.5f * (_latMax - _latMin);
+            float lat = LateralOffset(worldPos) - mid;
+            return Mathf.Abs(lat) <= Mathf.Max(regionHalfWidth, halfBand);
+        }
 
         // Lateral offset from the centre line (clamp the foot point to the segment).
         Vector3 foot = _start + _dir * Mathf.Clamp(d, 0f, TotalLength);
@@ -96,10 +155,58 @@ public class PathSampler : MonoBehaviour
         return Mathf.Lerp(_values[i], _values[i + 1], t - i);
     }
 
-    /// <summary>Value normalized to 0..1 across the dataset's min..max, for driving cues.</summary>
+    /// <summary>Value normalized to 0..1 across the dataset's min..max, for driving cues.
+    /// This is the graph's value at the participant's PROGRESS along the walk (where
+    /// they stand sideways is ignored). Kept as the legacy feedback source.</summary>
     public float NormalizedValueAt(Vector3 worldPos)
     {
         if (!_ready || Mathf.Approximately(_min, _max)) return 0f;
         return Mathf.InverseLerp(_min, _max, RawValueAt(worldPos));
+    }
+
+    // ---- Standing-position feedback (M46) ----
+
+    /// <summary>Signed ground-plane offset of the position along the value axis,
+    /// measured from dot 0's walk line. Height is ignored.</summary>
+    public float LateralOffset(Vector3 worldPos)
+    {
+        Vector3 p = worldPos - _start;
+        p.y = 0f;
+        return Vector3.Dot(p, _valueDir);
+    }
+
+    /// <summary>
+    /// The value the participant is STANDING on: their lateral floor position mapped
+    /// onto the graph's value axis, normalized 0..1 between the dataset's min line and
+    /// max line (clamped beyond them). Same per-dataset 0..1 range as
+    /// NormalizedValueAt, so cue gains stay matched across conditions/datasets.
+    /// Falls back to NormalizedValueAt when no value axis is available.
+    /// </summary>
+    public float NormalizedPositionValueAt(Vector3 worldPos)
+    {
+        if (!_ready) return 0f;
+        if (!_hasValueAxis) return NormalizedValueAt(worldPos);
+        return Mathf.InverseLerp(_latMin, _latMax, LateralOffset(worldPos));
+    }
+
+    /// <summary>NormalizedPositionValueAt expressed in the dataset's own units.</summary>
+    public float RawPositionValueAt(Vector3 worldPos)
+        => Mathf.Lerp(_min, _max, NormalizedPositionValueAt(worldPos));
+
+    // Scene-view aid: the min (blue) and max (red) value lines that bound the
+    // standing-position feedback, plus the corridor centre (yellow).
+    private void OnDrawGizmosSelected()
+    {
+        if (!_ready || !_hasValueAxis) return;
+        Vector3 a = _start - _dir * regionMargin;
+        Vector3 b = _start + _dir * (TotalLength + regionMargin);
+
+        Gizmos.color = new Color(0.3f, 0.5f, 1f);
+        Gizmos.DrawLine(a + _valueDir * _latMin, b + _valueDir * _latMin);
+        Gizmos.color = new Color(1f, 0.3f, 0.3f);
+        Gizmos.DrawLine(a + _valueDir * _latMax, b + _valueDir * _latMax);
+        Gizmos.color = new Color(1f, 0.85f, 0.2f);
+        float mid = 0.5f * (_latMin + _latMax);
+        Gizmos.DrawLine(a + _valueDir * mid, b + _valueDir * mid);
     }
 }

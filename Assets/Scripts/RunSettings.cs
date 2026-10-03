@@ -19,6 +19,10 @@ public enum ConditionOrderMode
     Random,
     /// <summary>Control always goes first; the remaining 4 conditions are shuffled randomly after it.</summary>
     RandomExceptControlFirst,
+    /// <summary>Balanced (Williams) Latin square: 10 rows for 5 conditions, row picked by
+    /// participant id ((id-1) mod 10). Balances both position and first-order carryover
+    /// (which condition follows which) across every 10 participants. See ROADMAP.md M47.</summary>
+    LatinSquare,
 }
 
 /// <summary>
@@ -51,7 +55,8 @@ public class RunSettings : ScriptableObject
     [Tooltip("Sequential = fixed order every session (no randomization). Random = all " +
              "5 conditions, Control included, shuffled into any order. " +
              "RandomExceptControlFirst = Control always goes first, the remaining 4 " +
-             "are shuffled after it. Random modes are seeded from the participant id " +
+             "are shuffled after it. LatinSquare = balanced Williams square, row = " +
+             "(participant id - 1) mod 10 -- recruit in multiples of 10 for full balance. Random modes are seeded from the participant id " +
              "(and block, if trialsPerCondition > 1), so a given participant's order " +
              "is reproducible, not dependent on global random state.")]
     public ConditionOrderMode conditionOrderMode = ConditionOrderMode.Sequential;

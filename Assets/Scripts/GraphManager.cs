@@ -338,7 +338,13 @@ private void ConfigureSampler()
             segment = span / (_spawnedDots.Count - 1);
         }
 
-        pathSampler.Configure(start, walkDir, segment, graphData.values);
+        // Final dot positions let the sampler derive the lateral VALUE axis for
+        // standing-position feedback straight from the real geometry (M46), so it
+        // follows any resize / re-centre / ExperimentArea change automatically.
+        var dotPositions = new List<Vector3>(_spawnedDots.Count);
+        foreach (var dot in _spawnedDots) dotPositions.Add(dot.transform.position);
+
+        pathSampler.Configure(start, walkDir, segment, graphData.values, dotPositions);
 
         PlaceEndpointMarkers(walkDir);
     }

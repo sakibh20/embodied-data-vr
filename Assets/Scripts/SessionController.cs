@@ -322,10 +322,44 @@ private void Awake()
                 restArray.CopyTo(order, 1);
                 return order;
             }
+            case ConditionOrderMode.LatinSquare:
+            {
+                // Later blocks (trialsPerCondition > 1) step to the next row so a
+                // participant doesn't repeat the identical order.
+                int[] row = WilliamsRow(AllConditions.Length, participantId - 1 + block);
+                var order = new ConditionId[row.Length];
+                for (int i = 0; i < row.Length; i++) order[i] = AllConditions[row[i]];
+                return order;
+            }
             case ConditionOrderMode.Sequential:
             default:
                 return (ConditionId[])AllConditions.Clone();
         }
+    }
+
+    // Balanced (Williams) Latin square row. First row: 0, 1, n-1, 2, n-2, ...; row r adds
+    // r (mod n) to every entry. For odd n the square needs 2n rows -- the n rows plus
+    // their reverses -- to balance first-order carryover; for even n, n rows suffice.
+    // Every condition appears once per row and once per position across a full set of
+    // rows. Indices refer to AllConditions. See ROADMAP.md M47.
+    public static int WilliamsRowCount(int n) => n % 2 == 0 ? n : 2 * n;
+
+    public static int[] WilliamsRow(int n, int rowIndex)
+    {
+        int rows = WilliamsRowCount(n);
+        int r = ((rowIndex % rows) + rows) % rows;
+
+        int[] first = new int[n];
+        int lo = 1, hi = n - 1;
+        for (int j = 1; j < n; j++)
+            first[j] = (j % 2 == 1) ? lo++ : hi--;
+
+        int shift = r % n;
+        int[] row = new int[n];
+        for (int j = 0; j < n; j++) row[j] = (first[j] + shift) % n;
+
+        if (r >= n) System.Array.Reverse(row);   // mirrored half (odd n only)
+        return row;
     }
 
     // Reproducible per participant/block seed for condition-order shuffling.
@@ -782,8 +816,8 @@ private void Update()
 
     // audio_cue/visual_cue ("semantic"/"plain"/"none") per the modified plan's condition
     // mapping (ROADMAP M4): Abstract = plain sphere + plain beep; Representative = semantic
-    // spark + semantic electric buzz; SemanticAudio (aka MismatchStatic) = plain sphere +
-    // semantic electric buzz; SemanticVisual (aka MismatchNonRep) = semantic spark + plain
+    // spark + semantic electric buzz; SemanticAudio = plain sphere +
+    // semantic electric buzz; SemanticVisual = semantic spark + plain
     // beep; Control = neither.
     private static (string audio, string visual) CueLabels(string conditionName)
     {

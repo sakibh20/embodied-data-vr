@@ -1,9 +1,23 @@
 using UnityEngine;
 
 /// <summary>
+/// What the cues encode (M46).
+///   StandingPosition     -- where the participant STANDS on the graph's value axis
+///                           (their sideways floor position between the dataset's
+///                           min and max lines). Default.
+///   GraphValueAtProgress -- legacy: the graph's own value at how far along the walk
+///                           the participant is, regardless of where they stand sideways.
+/// </summary>
+public enum FeedbackSource
+{
+    StandingPosition,
+    GraphValueAtProgress
+}
+
+/// <summary>
 /// Bridges the participant's position to the active condition's cues. Reads the
-/// player position, asks the PathSampler for the interpolated value there, and
-/// pushes it to the condition controller. Input-agnostic: works with the desktop
+/// player position, asks the PathSampler for the value there (see FeedbackSource),
+/// and pushes it to the condition controller. Input-agnostic: works with the desktop
 /// walker now and the XR rig later, as long as 'player' points at the head/camera.
 /// </summary>
 public class WalkValueDriver : MonoBehaviour
@@ -16,11 +30,27 @@ public class WalkValueDriver : MonoBehaviour
     [Tooltip("Routes the walk value to whichever condition is currently active.")]
     [SerializeField] private ConditionManager conditionManager;
 
+    [Header("Feedback")]
+    [Tooltip("StandingPosition: cues follow where you stand on the graph's value axis " +
+             "(sideways on the floor, between the min and max value lines). " +
+             "GraphValueAtProgress: legacy -- cues follow the graph's value at your " +
+             "progress along the walk. Region gating and per-condition behaviour " +
+             "(Control silent; cues off outside the region) are the same for both.")]
+    [SerializeField] private FeedbackSource feedbackSource = FeedbackSource.StandingPosition;
+
     [Header("State")]
     [SerializeField] private bool active = true;
 
     [Range(0f, 1f)]
     [SerializeField] private float debugNormalizedValue;   // read-only view in inspector
+    [SerializeField] private float debugRawValue;          // same, in dataset units
+    [SerializeField] private bool debugInRegion;
+
+    public FeedbackSource Source
+    {
+        get => feedbackSource;
+        set => feedbackSource = value;
+    }
 
     public void SetActive(bool value) => active = value;
 
@@ -65,13 +95,24 @@ private void Update()
         // Cues run only while the participant is on the walk; outside the graph
         // region they are gated off (silent, no density) rather than clamped.
         bool inRegion = path.IsWithinRegion(head.position);
+        debugInRegion = inRegion;
 
         if (conditionManager != null)
             conditionManager.SetCuesActive(inRegion);
 
         if (!inRegion) return;
 
-        float normalized = path.NormalizedValueAt(head.position);
+        float normalized;
+        if (feedbackSource == FeedbackSource.StandingPosition)
+        {
+            normalized = path.NormalizedPositionValueAt(head.position);
+            debugRawValue = path.RawPositionValueAt(head.position);
+        }
+        else
+        {
+            normalized = path.NormalizedValueAt(head.position);
+            debugRawValue = path.RawValueAt(head.position);
+        }
         debugNormalizedValue = normalized;
 
         if (conditionManager != null)

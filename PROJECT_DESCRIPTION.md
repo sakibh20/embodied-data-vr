@@ -4,7 +4,7 @@
 > objects, changed constants, new conditions, etc.). Companion files:
 > `ROADMAP.md` (milestones/status), `HOW_TO_RUN.md` (run steps),
 > `XR_MODE_SWITCHING.md` (desktop / simulator / headset).
-> Last updated: 2026-09-09 (M45).
+> Last updated: 2026-10-03 (M46).
 
 ---
 
@@ -23,13 +23,15 @@ offset/height), then reconstruct it from memory. We test whether adding sensory
 | 0  | `Control`        | `Condition_Control`       | none       | none      | —                     | embodied baseline: graph + grid only |
 | 1  | `Abstract`       | `Condition_Abstract`      | sphere (`DensityObject`) | beep | yes | generic audio + generic visual |
 | 2  | `Representative` | `Condition_Representative`| spark (`SparkObject`)    | electric hum | yes | representative audio + representative visual |
-| 3  | `SemanticAudio`  | `Condition_MismatchStatic`| sphere (`DensityObject`) | electric hum | **NO (static)** | "mismatch static": representative audio but it does **not** track the data |
-| 4  | `SemanticVisual` | `Condition_MismatchNonRep`| spark (`SparkObject`)    | beep | yes | "mismatch non-rep": representative visual + generic audio |
+| 3  | `SemanticAudio`  | `Condition_SemanticAudio` | sphere (`DensityObject`) | electric hum | yes | representative audio + generic visual |
+| 4  | `SemanticVisual` | `Condition_SemanticVisual`| spark (`SparkObject`)    | beep | yes | representative visual + generic audio |
 
-> Note: the enum names for id 3/4 (`SemanticAudio`/`SemanticVisual`) are historical and
-> read oddly vs the object names (`MismatchStatic`/`MismatchNonRep`). They are only
-> labels — behaviour is defined by each condition's serialized fields (prefab, clip,
-> `respondToValue`). Renaming the enum would be cosmetic but touches serialized data.
+> M47: a clean 2×2 (audio semantic/plain × visual semantic/plain) + Control, matching the
+> supervisor's data-notes doc (its c1..c5 = Representative, Abstract, SemanticAudio,
+> SemanticVisual, Control) and the CSV `audio_cue`/`visual_cue` labels. All four cue
+> conditions track the data. The objects were renamed from `Condition_MismatchStatic`/
+> `Condition_MismatchNonRep`, and `SemanticAudio` no longer plays a static hum
+> (`respondToValue` is now true; it was false before M47).
 
 ### The phases per trial (`SessionPhase`)
 
@@ -147,7 +149,10 @@ ROADMAP.md, HOW_TO_RUN.md, XR_MODE_SWITCHING.md, PROJECT_DESCRIPTION.md
 ### Walk-value pipeline (drives the cues)
 ```
 head position (DesktopWalker cam OR XR head)
-   → PathSampler.NormalizedValueAt(pos)      // 0..1 across dataset min..max
+   → PathSampler.NormalizedPositionValueAt(pos) // M46: where you STAND on the value axis,
+                                                // 0..1 between the dataset's min and max lines
+     (legacy: PathSampler.NormalizedValueAt(pos) = graph value at your walk progress;
+      chosen by WalkValueDriver.feedbackSource)
    → WalkValueDriver (every frame)           // also gates cues to the walk region
    → ConditionManager.SetNormalizedValue()   // forwards to the active condition
    → CueConditionController.Apply(v)
@@ -202,6 +207,15 @@ affect study results.
 - Normalised: `NormalizedValueAt = InverseLerp(min, max, RawValueAt)` → **0..1 per dataset**.
 - On-walk region gate: within `±regionMargin` (**0.5 m**) of the ends along the path AND
   within `regionHalfWidth` (**2 m**) laterally. Outside → cues gated off (silent, no density).
+- **Standing-position feedback (M46, default):** the cue value is the participant's
+  *lateral* floor position on the graph's value axis, not the graph's value at their
+  progress. `PathSampler` derives the value axis from the final dot positions (ground-plane
+  direction from the min-value dot to the max-value dot, walk component removed), so
+  `norm = InverseLerp(lat(minDot), lat(maxDot), lat(head))`, clamped; head height ignored.
+  Standing exactly on any dot yields that dot's value. Follows any resize/re-centre/area
+  rotation automatically. `WalkValueDriver.feedbackSource = GraphValueAtProgress` restores
+  the old mapping. With a value axis, the lateral region gate is centred on the middle of
+  the value band (not dot 0's line), half-width `max(regionHalfWidth, halfBand)`.
 - **Study impact:** normalisation is **per-dataset**, so cue intensity always spans the
   full 0..1 range regardless of a dataset's absolute values — cross-condition cue ranges
   are comparable. `regionHalfWidth`/`regionMargin` define the walkable corridor.
@@ -220,8 +234,8 @@ affect study results.
   pulse interval `= 1 / pps`; each pulse restarts the clip (non-overlapping).
 - **Modes** (`AudioMode`, set session-wide): `PitchOnly` (continuous loop, pitch varies),
   `TempoOnly` (pulses, pitch held at 1), `Both` (pulses whose rate + pitch vary).
-- **Static** (`respondToValue = false`, only `Condition_MismatchStatic`): steady hum at
-  pitch ≈ 1, ignores the walk — this is the deliberate audio↔data mismatch.
+- **Static** (`respondToValue = false`): steady hum at pitch ≈ 1, ignores the walk.
+  **No condition uses it since M47** (it was `SemanticAudio`'s setting before); kept as an option.
 - **Study impact:** pitch/tempo ranges are matched across reacting conditions, so audio
   cue *intensity* is comparable; the manipulations are the **clip** (beep vs electric) and
   whether it reacts (`respondToValue`). Changing the ranges changes cue salience for all.

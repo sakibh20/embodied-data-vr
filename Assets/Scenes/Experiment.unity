@@ -229,7 +229,7 @@ GameObject:
   - component: {fileID: 297737333}
   - component: {fileID: 297737332}
   m_Layer: 0
-  m_Name: Condition_MismatchNonRep
+  m_Name: Condition_SemanticVisual
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -997,6 +997,7 @@ MonoBehaviour:
   participantId: 1
   trialsPerCondition: 1
   retraceSampleInterval: 0.1
+  retraceReviewSeconds: 5
   autoEndOvershoot: 0.3
   autoEndGracePeriod: 0.5
   debugKeys: 1
@@ -1355,6 +1356,7 @@ MonoBehaviour:
   localOffset: {x: 0, y: 0.15, z: 2}
   canvasScale: 0.0025
   retraceInstructionSeconds: 4
+  retraceReviewPanelSeconds: 2.5
 --- !u!4 &677478254
 Transform:
   m_ObjectHideFlags: 0
@@ -1558,8 +1560,11 @@ MonoBehaviour:
   player: {fileID: 758134062}
   path: {fileID: 759068180}
   conditionManager: {fileID: 407123596}
+  feedbackSource: 0
   active: 1
   debugNormalizedValue: 0
+  debugRawValue: 0
+  debugInRegion: 0
 --- !u!114 &759068180
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2888,7 +2893,7 @@ GameObject:
   - component: {fileID: 2016803390}
   - component: {fileID: 2016803389}
   m_Layer: 0
-  m_Name: Condition_MismatchStatic
+  m_Name: Condition_SemanticAudio
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -2925,7 +2930,7 @@ MonoBehaviour:
   audioSource: {fileID: 0}
   clip: {fileID: 8300000, guid: c831eff0d29cf13408a2cfdf3a1e1061, type: 3}
   mode: 0
-  respondToValue: 0
+  respondToValue: 1
   minPitch: 0.8
   maxPitch: 1.5
   minPulsesPerSecond: 1

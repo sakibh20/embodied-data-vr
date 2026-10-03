@@ -8,7 +8,7 @@ using UnityEngine.InputSystem;
 /// (desktop testing) and button-ready public methods (for an on-screen UI later).
 ///
 /// Keyboard (desktop):
-///   1..5 → Control / Abstract / Representative / MismatchStatic / MismatchNonRep
+///   1..5 → Control / Abstract / Representative / SemanticAudio / SemanticVisual
 ///   T / P / B → tempo-only / pitch-only / both audio
 ///   G → (re)generate the graph
 ///

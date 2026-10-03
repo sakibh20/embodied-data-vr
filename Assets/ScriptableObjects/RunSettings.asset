@@ -15,4 +15,4 @@ MonoBehaviour:
   audioMode: 2
   runType: 0
   recallInputMode: 1
-  conditionOrderMode: 2
+  conditionOrderMode: 3
