@@ -22,9 +22,7 @@ public class SessionBootstrap : MonoBehaviour
     [Header("Rigs (exactly one is enabled for the chosen RunType)")]
     [Tooltip("The desktop Camera GameObject (DesktopWalker + AudioListener).")]
     [SerializeField] private GameObject desktopCameraObject;
-    [Tooltip("\"XR Origin (XR Rig)\" -- used for both Simulator and VR run types; " +
-             "the editor-only XR Interaction Simulator supplies the input in " +
-             "Simulator mode and is simply absent for a real headset in VR mode.")]
+    [Tooltip("\"XR Origin (XR Rig)\" -- the VR rig, driven by the real headset.")]
     [SerializeField] private GameObject xrRigObject;
     [Tooltip("\"XR Origin (VR)\" spare/head-only rig. Always kept disabled here.")]
     [SerializeField] private GameObject spareXrRigObject;
@@ -69,10 +67,56 @@ public class SessionBootstrap : MonoBehaviour
         if (xrRigObject != null) xrRigObject.SetActive(!desktop);
         if (spareXrRigObject != null) spareXrRigObject.SetActive(false);
 
+        if (!desktop && xrRigObject != null)
+        {
+            ForceFloorTracking(xrRigObject);
+            if (settings == null || !settings.allowControllerLocomotion)
+                DisableControllerLocomotion(xrRigObject);
+        }
+
         PlayerRig.Mode = mode;
         PlayerRig.Head = desktop
             ? (desktopCameraObject != null ? desktopCameraObject.transform : null)
             : ResolveXrHead(xrRigObject);
+    }
+
+    // Real walking needs head height measured from the real floor (Quest Guardian
+    // floor). The rig was saved as "Not Specified", which lets the runtime pick a
+    // device-relative origin plus a hard-coded camera Y offset -- graph, cues and the
+    // logged head_y would then depend on where the headset was when tracking started.
+    private static void ForceFloorTracking(GameObject rig)
+    {
+        var origin = rig.GetComponent<Unity.XR.CoreUtils.XROrigin>();
+        if (origin != null)
+            origin.RequestedTrackingOriginMode = Unity.XR.CoreUtils.XROrigin.TrackingOriginMode.Floor;
+    }
+
+    // The XRI starter rig ships with thumbstick move, snap/continuous turn, teleport,
+    // climb, jump and gravity enabled. Any of them would slide/rotate the virtual room
+    // under the participant, so the floor graph would no longer sit where they are
+    // physically walking. Disable every LocomotionProvider, stop the controller input
+    // manager from entering teleport mode, and hide the teleport rays.
+    private static void DisableControllerLocomotion(GameObject rig)
+    {
+        foreach (var p in rig.GetComponentsInChildren<UnityEngine.XR.Interaction.Toolkit.Locomotion.LocomotionProvider>(true))
+            p.enabled = false;
+
+        // ControllerInputActionManager is an XRI *sample* script, so it is reached by
+        // name/reflection to avoid a hard dependency on the sample assembly.
+        // smoothMotionEnabled = true turns the teleport-mode input actions OFF (and the
+        // smooth-move provider it would hand over to is disabled above).
+        foreach (var mb in rig.GetComponentsInChildren<MonoBehaviour>(true))
+        {
+            if (mb == null) continue;
+            if (mb.GetType().Name == "ControllerInputActionManager")
+            {
+                var prop = mb.GetType().GetProperty("smoothMotionEnabled");
+                if (prop != null && prop.CanWrite) prop.SetValue(mb, true);
+            }
+            if (mb is UnityEngine.XR.Interaction.Toolkit.Interactors.XRRayInteractor &&
+                mb.gameObject.name.Contains("Teleport"))
+                mb.gameObject.SetActive(false);
+        }
     }
 
     private static Transform ResolveXrHead(GameObject rig)

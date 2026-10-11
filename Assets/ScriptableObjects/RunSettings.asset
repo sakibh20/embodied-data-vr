@@ -16,3 +16,4 @@ MonoBehaviour:
   runType: 0
   recallInputMode: 1
   conditionOrderMode: 3
+  allowControllerLocomotion: 0

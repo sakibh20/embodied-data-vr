@@ -383,11 +383,13 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::DensityController
   spawnPrefab: {fileID: 8125429067791596762, guid: 824560d90cc0715499bf19397ffda437, type: 3}
   area: {fileID: 0}
+  settings: {fileID: 11400000, guid: 6ce9427ee757f406baad8a3c299dc75a, type: 2}
   areaSize: {x: 5, y: 5}
   centerPoint: {fileID: 297737336}
   minCount: 5
   maxCount: 100
   sizeRange: {x: 0.1, y: 0.3}
+  scaleTweenSeconds: 0.3
 --- !u!4 &297737336
 Transform:
   m_ObjectHideFlags: 0
@@ -1266,6 +1268,10 @@ PrefabInstance:
       propertyPath: m_UseGravity
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 1178791450436251564, guid: f6336ac4ac8b4d34bc5072418cdc62a0, type: 3}
+      propertyPath: m_RequestedTrackingOriginMode
+      value: 2
+      objectReference: {fileID: 0}
     - target: {fileID: 1717954561962503725, guid: f6336ac4ac8b4d34bc5072418cdc62a0, type: 3}
       propertyPath: m_Name
       value: XR Origin (XR Rig)
@@ -1820,11 +1826,13 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::DensityController
   spawnPrefab: {fileID: 2054353098026386417, guid: e568708cf6c186e4ab67de94cb0453b0, type: 3}
   area: {fileID: 0}
+  settings: {fileID: 11400000, guid: 6ce9427ee757f406baad8a3c299dc75a, type: 2}
   areaSize: {x: 5, y: 5}
   centerPoint: {fileID: 1227098291}
   minCount: 5
   maxCount: 100
   sizeRange: {x: 0.1, y: 0.3}
+  scaleTweenSeconds: 0.3
 --- !u!4 &1227098291
 Transform:
   m_ObjectHideFlags: 0
@@ -2455,11 +2463,13 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::DensityController
   spawnPrefab: {fileID: 8125429067791596762, guid: 824560d90cc0715499bf19397ffda437, type: 3}
   area: {fileID: 0}
+  settings: {fileID: 11400000, guid: 6ce9427ee757f406baad8a3c299dc75a, type: 2}
   areaSize: {x: 5, y: 5}
   centerPoint: {fileID: 1565056395}
   minCount: 5
   maxCount: 100
   sizeRange: {x: 0.1, y: 0.3}
+  scaleTweenSeconds: 0.3
 --- !u!4 &1565056395
 Transform:
   m_ObjectHideFlags: 0
@@ -3047,11 +3057,13 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::DensityController
   spawnPrefab: {fileID: 2054353098026386417, guid: e568708cf6c186e4ab67de94cb0453b0, type: 3}
   area: {fileID: 0}
+  settings: {fileID: 11400000, guid: 6ce9427ee757f406baad8a3c299dc75a, type: 2}
   areaSize: {x: 5, y: 5}
   centerPoint: {fileID: 2016803393}
   minCount: 5
   maxCount: 100
   sizeRange: {x: 0.1, y: 0.3}
+  scaleTweenSeconds: 0.3
 --- !u!4 &2016803393
 Transform:
   m_ObjectHideFlags: 0

@@ -37,19 +37,19 @@ Play. It's set on the **`RunSettings`** asset
 (`Assets/ScriptableObjects/RunSettings.asset`) — select it in the Project window and
 set **Run Type** in the Inspector:
 
-| Run Type | What it drives | Simulator setting | Headset |
-|----------|-----------------|--------------------|---------|
-| **Desktop** | `Camera` (DesktopWalker) | off | — |
-| **Simulator** | `XR Origin (XR Rig)` + XR Interaction Simulator (mock VR, no headset) | on | — |
-| **VR** | `XR Origin (XR Rig)` + a real connected headset | off | connected |
+| Run Type | What it drives | Headset |
+|----------|-----------------|---------|
+| **Desktop** | `Camera` (DesktopWalker) | — |
+| **VR** | `XR Origin (XR Rig)` + a real connected headset (Quest 2 via Link) | connected |
+
+(The XR Interaction Simulator mode was removed in M50.)
 
 `SessionBootstrap` (on the `Bootstrap` object in `Experiment.unity`) reads this at
 startup and activates exactly one rig for you — `Camera` for Desktop, `XR Origin (XR
-Rig)` for Simulator/VR — and the spare `XR Origin (VR)` is always kept disabled. It also
-applies **Audio Mode** from the same asset. For Simulator mode, the
-**Automatically Instantiate Simulator Prefab** setting
-(`Assets/XRI/Settings/Resources/XRDeviceSimulatorSettings.asset`) still needs to be on
-(Editor-only; stripped from builds).
+Rig)` for VR — and the spare `XR Origin (VR)` is always kept disabled. It also
+applies **Audio Mode** from the same asset. In VR it forces **Floor** tracking and
+disables all thumbstick locomotion (unless `Allow Controller Locomotion` is ticked) so
+the participant can only move by physically walking (M49).
 
 The same asset also has **Recall Phase → Recall Input Mode**: `MultipleChoice` (default — pick one of 4 options) or `TextEntry` (type the numeric value into a box instead). Switch it any time before pressing Play; `SessionUI` reads it from `RunSettings` via `StudyConfig` at startup and renders the recall phase accordingly.
 
@@ -77,18 +77,10 @@ you press Play in `Experiment.unity`.
 4. **Audio mode** comes from `RunSettings`; it can still be changed live from the
    in-session UI (Pitch / Tempo / Both) if needed.
 
-### Simulator (mock VR, no headset)
-1. Press **Play** (with `RunSettings.runType = Simulator`) — the **XR Interaction
-   Simulator** auto-spawns (on-screen help shows the controls).
-2. Simulate movement/looking with keyboard + mouse (per the simulator help overlay) to
-   "walk" the graph; the XR head drives the walk value exactly like a real headset.
-3. Interact with the UI either by pointing a **simulated controller ray** at the buttons
-   (the canvas has an XR raycaster) or with the **debug keys** (Enter / 1–4).
-
 ### VR (real headset)
-1. Connect the headset, start its OpenXR runtime.
-2. Set `RunSettings.runType = VR` (turn the simulator setting **off** so simulated +
-   real input don't conflict).
+1. Connect the Quest 2 via Link; in the Meta Quest Link PC app make it the **active
+   OpenXR runtime** (Settings → General).
+2. Set `RunSettings.runType = VR`.
 3. Press **Play** (or build & deploy). Physically walk the graph; use the controller ray
    for the UI.
 
@@ -268,8 +260,6 @@ something participants see) under the Unity menu bar: **Tools > Study Data**.
 - **Nothing happens on Play in VR mode:** confirm exactly one XR Origin is active and the
   desktop `Camera` is disabled; check the Console for OpenXR messages.
 - **Two audio listeners warning:** only one camera (desktop OR XR) should be active.
-- **Simulator didn't spawn:** check the simulator setting is on and the prefab is assigned
-  in `XRDeviceSimulatorSettings`.
 
 ---
 

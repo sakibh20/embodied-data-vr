@@ -17,3 +17,8 @@ MonoBehaviour:
   spawnDuration: 0.3
   delayBetweenPoints: 0.2
   dotSize: 0.1
+  cueField3D: 1
+  cueFieldPadding: {x: 1.5, y: 1.5}
+  cueFieldHeight: {x: 0.3, y: 2.8}
+  keepWalkZoneClear: 1
+  walkZoneClearHeight: 2.1

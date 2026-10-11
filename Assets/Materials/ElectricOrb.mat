@@ -25,17 +25,27 @@ Material:
     m_TexEnvs: []
     m_Ints: []
     m_Floats:
-    - _ArcIntensity: 1.5
-    - _ArcSharpness: 26
-    - _Brightness: 2.2
-    - _FresnelIntensity: 1
-    - _FresnelPower: 3
-    - _NoiseScale: 9
-    - _NoiseSpeed: 1.2
-    - _PulseAmount: 0.35
-    - _PulseSpeed: 2.5
+    - _ArcIntensity: 2.2
+    - _ArcScale: 1.8
+    - _ArcSpeed: 1.8
+    - _ArcWarp: 2.2
+    - _ArcWidth: 0.055
+    - _BobAmplitude: 0.04
+    - _BobSpeed: 0.7
+    - _CenterPower: 3.5
+    - _FlickerAmount: 0.35
+    - _HaloFalloff: 2.6
+    - _HaloIntensity: 0.9
+    - _HaloSize: 0.6
+    - _RimPower: 3
+    - _SurgeBoost: 1.6
+    - _SurgeChance: 0.35
     m_Colors:
-    - _CoreColor: {r: 0.049999982, g: 0.11999995, b: 0.54999995, a: 1}
-    - _EdgeColor: {r: 0.54999995, g: 0.9, b: 1, a: 1}
+    - _ArcColor: {r: 0.55, g: 0.95, b: 1.9, a: 1}
+    - _ArcHotColor: {r: 2.2, g: 2.4, b: 2.6, a: 1}
+    - _CenterColor: {r: 0.08, g: 0.2, b: 0.75, a: 1}
+    - _CoreColor: {r: 0.008, g: 0.015, b: 0.07, a: 1}
+    - _HaloColor: {r: 0.25, g: 0.6, b: 1.4, a: 1}
+    - _RimColor: {r: 0.35, g: 0.75, b: 1.6, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

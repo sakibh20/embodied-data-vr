@@ -1,7 +1,9 @@
 using UnityEngine;
 
 /// <summary>Which rig drives the walk for a session.</summary>
-public enum RunType { Desktop, Simulator, VR }
+// Explicit values: VR keeps its old serialized value (2) after the XR Interaction
+// Simulator mode (was 1) was removed in M50, so existing RunSettings assets stay valid.
+public enum RunType { Desktop = 0, VR = 2 }
 
 /// <summary>How the recall (memory-test) phase collects an answer.</summary>
 public enum RecallInputMode { MultipleChoice, TextEntry }
@@ -27,8 +29,7 @@ public enum ConditionOrderMode
 
 /// <summary>
 /// Init-time configuration for a study run: which sonic dimension carries the data,
-/// which player rig to use (desktop keyboard/mouse, the editor-only XR Interaction
-/// Simulator, or a real headset), and how recall questions are answered. Edited
+/// which player rig to use (desktop keyboard/mouse or a real headset), and how recall questions are answered. Edited
 /// directly on the asset; read once at startup by <see cref="SessionBootstrap"/> in
 /// the study scene, which also publishes it to <see cref="StudyConfig"/> for the UI.
 /// </summary>
@@ -41,9 +42,8 @@ public class RunSettings : ScriptableObject
     public CueAudioController.AudioMode audioMode = CueAudioController.AudioMode.Both;
 
     [Header("Run Type")]
-    [Tooltip("Desktop = keyboard/mouse (DesktopWalker). Simulator = XR Interaction " +
-             "Simulator driving the XR rig in-editor, no headset needed. VR = the " +
-             "same XR rig driven by a real connected headset.")]
+    [Tooltip("Desktop = keyboard/mouse (DesktopWalker). VR = the XR rig driven by a " +
+             "real connected headset (Quest 2 via Link).")]
     public RunType runType = RunType.Desktop;
 
     [Header("Recall Phase")]
@@ -60,4 +60,11 @@ public class RunSettings : ScriptableObject
              "(and block, if trialsPerCondition > 1), so a given participant's order " +
              "is reproducible, not dependent on global random state.")]
     public ConditionOrderMode conditionOrderMode = ConditionOrderMode.Sequential;
+
+    [Header("XR (VR)")]
+    [Tooltip("Off (study default): thumbstick move/turn, teleport, climb and jump are " +
+             "disabled on the XR rig, so the participant can ONLY move by physically " +
+             "walking -- keeps the virtual graph locked to the real room. On: the XRI " +
+             "starter-rig locomotion is left as authored (debugging only). See ROADMAP.md M49.")]
+    public bool allowControllerLocomotion = false;
 }

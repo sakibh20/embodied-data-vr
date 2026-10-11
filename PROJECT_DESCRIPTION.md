@@ -3,7 +3,7 @@
 > Living document. Update it whenever the project changes (new scripts, renamed
 > objects, changed constants, new conditions, etc.). Companion files:
 > `ROADMAP.md` (milestones/status), `HOW_TO_RUN.md` (run steps),
-> `XR_MODE_SWITCHING.md` (desktop / simulator / headset).
+> `XR_MODE_SWITCHING.md` (desktop / headset).
 > Last updated: 2026-10-03 (M46).
 
 ---
@@ -66,7 +66,7 @@ on the ground, `EndpointMarkers.cs`, M39/M40) mark both ends of the current tria
 corridor — placed once `GraphManager` finishes generating/aligning, and left in place
 through Walk/Distractor/Retrace/TrialComplete (they're what "walk back to the start"
 above actually means physically). Pure world-space geometry, so it needs no VR-specific
-handling — same reason the floor graph itself works across desktop/simulator/VR.
+handling — same reason the floor graph itself works across desktop/VR.
 Anchored on **`ExperimentArea`** — the room-area rectangle, i.e. the cyan square you
 see as its Scene-view gizmo (`ExperimentArea.OnDrawGizmos`) — not on the graph or
 `PathSampler` at all (M43). Width = `area.Width`, centred on `area.Center`, positioned
@@ -107,11 +107,11 @@ Assets/
                                    see `autoStartSession` on `SessionBootstrap` (M34) to go
                                    back to auto-starting immediately for quick desktop debugging
   Scripts/                     ← all study code (compiles into Assembly-CSharp)
-  ScriptableObjects/RunSettings.asset  ← audioMode + runType (Desktop/Simulator/VR),
+  ScriptableObjects/RunSettings.asset  ← audioMode + runType (Desktop/VR),
                                    read by SessionBootstrap at startup
   Data/…                       ← GraphData assets (Dataset_01..06), GraphSettings
-  Samples/XR Interaction Toolkit/3.3.1/…   ← Starter Assets rig + XR Interaction Simulator
-  XRI/Settings/…               ← XR Device/Interaction Simulator settings
+  Samples/XR Interaction Toolkit/3.3.1/…   ← Starter Assets rig (XR Interaction Simulator sample removed in M50)
+  XRI/Settings/…               ← XRI settings (simulator auto-instantiate off, no prefab)
 Analysis/
   analyze_study.py             ← raw CSV -> analysis CSV pipeline (§6), reads every
                                    participant subfolder under StudyData/
@@ -159,10 +159,10 @@ head position (DesktopWalker cam OR XR head)
         → DensityController.UpdateDensity(v)  // visual field density
         → CueAudioController.SetNormalizedValue(v)  // pitch/tempo
 ```
-`SessionController` and `WalkValueDriver` **auto-resolve** which transform is "the head":
-the XR head camera when an XR device is active (real headset) or when the desktop camera
-is disabled (simulator); otherwise the `DesktopWalker`. So the same scene runs in all
-three modes with no rewiring (see `XR_MODE_SWITCHING.md`).
+`SessionController` and `WalkValueDriver` read the head from `PlayerRig.Head`, which
+`SessionBootstrap` sets from `RunSettings.runType`: the XR head camera in VR, the
+`DesktopWalker` camera on Desktop. So the same scene runs in both modes with no rewiring
+(see `XR_MODE_SWITCHING.md`).
 
 ### Session pipeline
 ```
@@ -222,7 +222,19 @@ affect study results.
 
 ### 4.3 Visual density (`DensityController`)
 - `count = round(lerp(minCount, maxCount, norm))` with **`minCount = 5`, `maxCount = 100`**.
-- Objects scattered in `ExperimentArea.RandomPoint()`, random size in `[0.1, 0.3]`.
+- **3D cue field (M48):** objects are spread through a room-like box configured on the
+  shared **`GraphSettings` asset** (`Assets/Scripts/GraphSettings.asset`, "Cue Field" header):
+  ExperimentArea footprint + `cueFieldPadding` (**1.5 m** each side → 7×7 m for a 4×4 area),
+  height band `cueFieldHeight` (**0.3–2.8 m**), and `keepWalkZoneClear` (**on**): inside the
+  area footprint objects only spawn above `walkZoneClearHeight` (**2.1 m**), so nothing floats
+  at body/face height on the walk. `cueField3D = false` restores the old floor-plane scatter.
+  Random size `[0.1, 0.3]`; objects scale in/out over `scaleTweenSeconds` (0.3 s) instead of popping.
+- **Looks (M48):** Abstract = `SoftOrb` shader/material: neutral, softly lit pearl orb (no glow,
+  no colour temperature, so it stays generic). Semantic = `ElectricOrb` shader (rewritten):
+  dark plasma glass with thick crawling electric arcs, flicker + occasional surges and a
+  built-in additive halo (cameras have post-processing off, so no bloom is needed). Both float
+  gently, each orb on its own timing; no shadows, no colliders (colliders would block the VR
+  rig in a filled room). Preview without Play: **Tools > Study Visuals > Render Cue Preview**.
 - **Study impact:** the density→value gain (5..100) is identical across the 4 cue
   conditions, so the *visual* cue strength is matched; only the **prefab** (sphere vs
   spark) differs by condition.
@@ -336,7 +348,7 @@ affect study results.
 | Walkable corridor size | `PathSampler.regionMargin`, `regionHalfWidth`. |
 | Recall difficulty | distractor `step` factor (0.15) in `MakeNumericQuestion`. |
 | Add/rename a condition | Add a `ConditionId`, add a `Condition_*` object with `CueConditionController`, add it to `ConditionManager.conditions` **in id order**, add to `AllConditions` in `SessionController`. |
-| Desktop ↔ simulator ↔ headset | See `XR_MODE_SWITCHING.md`. |
+| Desktop ↔ headset | See `XR_MODE_SWITCHING.md`. |
 | Skip the Idle confirm screen (auto-start like before M34) | Check `autoStartSession` on the `Bootstrap` GameObject's `SessionBootstrap` component. |
 | Run analysis without the command line | `python Analysis/analysis_gui.py` (M35) — see §6. |
 
