@@ -81,6 +81,12 @@ you press Play in `Experiment.unity`.
 1. Connect the Quest 2 via Link; in the Meta Quest Link PC app make it the **active
    OpenXR runtime** (Settings → General).
 2. Set `RunSettings.runType = VR`.
+   **Start position (M51):** have the participant stand on the agreed spot in the room,
+   facing the walk direction, and press **Start Session** there. The whole layout (graph,
+   grid, Start/End markers, cue field) is anchored to that pose: they stand on the Start
+   marker and the walk goes straight ahead of them. (Researcher: debug key **R** in Idle
+   re-aligns without starting; `retracing_log.csv` positions are logged relative to this
+   layout, so analysis is unaffected by where the room spot is.)
 3. Press **Play** (or build & deploy). Physically walk the graph; use the controller ray
    for the UI.
 

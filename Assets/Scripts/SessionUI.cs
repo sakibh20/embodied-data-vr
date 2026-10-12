@@ -7,7 +7,9 @@ using UnityEngine.XR.Interaction.Toolkit.UI;   // XRUIInputModule, TrackedDevice
 using System.Globalization;
 
 /// <summary>
-/// Head-locked in-VR UI for the study. Instantiates a SessionCanvasView prefab (the
+/// World-anchored in-VR UI for the study (M51: was head-locked). The panel is placed
+/// in front of the participant whenever it appears or the phase changes, then stays
+/// fixed in the world; it only re-centres if they turn well away from it. Instantiates a SessionCanvasView prefab (the
 /// panel's whole look — title/body/scrollable content area — is authored in the
 /// Editor, not built in code) and populates it per SessionController phase change:
 /// stacks SessionOptionButton items for phase actions / multiple-choice recall
@@ -37,9 +39,20 @@ public class SessionUI : MonoBehaviour
     [SerializeField] private SessionOptionButton optionButtonPrefab;
     [SerializeField] private SessionAnswerInput answerInputPrefab;
 
-    [Header("Placement (head-locked)")]
+    [Header("Placement (world-anchored, M51)")]
+    [Tooltip("Where the panel is placed relative to the head when it appears: x = right, " +
+             "y = up, z = forward (metres). Facing is yaw-only so it stays upright.")]
     [SerializeField] private Vector3 localOffset = new Vector3(0f, 0.15f, 2f);
     [SerializeField] private float canvasScale = 0.0025f;
+    [Tooltip("If the panel is more than this many degrees (left/right) from where the " +
+             "participant is looking for refollowDelay seconds, it re-centres in front of " +
+             "them. 0 = never (fully fixed until the next phase).")]
+    [SerializeField] private float refollowAngle = 55f;
+    [SerializeField] private float refollowDelay = 0.8f;
+
+    private bool _wasVisible;
+    private SessionPhase _placedPhase;
+    private float _offViewTime;
 
     [Header("Retrace")]
     [Tooltip("How long the \"walk back to the start, then retrace\" instruction stays " +
@@ -255,13 +268,75 @@ public class SessionUI : MonoBehaviour
             _view.Canvas.worldCamera = cam;
         }
 
-        if (head != null)
+        // World-anchored: NOT parented to the head (or the XR Origin). Placed in front of
+        // the participant by PlaceInFrontOfHead whenever it is shown -- see LateUpdate.
+        _view.transform.SetParent(null, false);
+        _view.transform.localScale = Vector3.one * canvasScale;
+        PlaceInFrontOfHead();
+    }
+
+    // Keeps the world-anchored panel usable without head-locking it:
+    //  - when it becomes visible, or the phase changes while visible -> place it in front;
+    //  - while visible, if the participant has looked away (yaw) by more than
+    //    refollowAngle for refollowDelay seconds -> re-centre it in front of them
+    //    (e.g. tracking had not started yet when it first appeared, or they finished
+    //    Retrace facing the other way).
+    private void LateUpdate()
+    {
+        if (_view == null) return;
+        bool visible = _view.gameObject.activeSelf;
+        SessionPhase phase = session != null ? session.Phase : SessionPhase.Idle;
+
+        if (visible && (!_wasVisible || phase != _placedPhase))
         {
-            _view.transform.SetParent(head, false);
-            _view.transform.localPosition = localOffset;
-            _view.transform.localRotation = Quaternion.identity;
-            _view.transform.localScale = Vector3.one * canvasScale;
+            PlaceInFrontOfHead();
+            _placedPhase = phase;
         }
+        else if (visible && refollowAngle > 0f && OffViewAngle() > refollowAngle)
+        {
+            _offViewTime += Time.deltaTime;
+            if (_offViewTime >= refollowDelay) PlaceInFrontOfHead();
+        }
+        else
+        {
+            _offViewTime = 0f;
+        }
+
+        _wasVisible = visible;
+    }
+
+    private void PlaceInFrontOfHead()
+    {
+        _offViewTime = 0f;
+        Transform head = ResolveHead();
+        if (_view == null || head == null) return;
+
+        Vector3 fwd = FlatForward(head);
+        Vector3 right = Vector3.Cross(Vector3.up, fwd);
+        _view.transform.position = head.position + fwd * localOffset.z
+                                   + Vector3.up * localOffset.y + right * localOffset.x;
+        _view.transform.rotation = Quaternion.LookRotation(fwd, Vector3.up);
+
+        if (_view.Canvas != null && head.GetComponent<Camera>() is Camera cam)
+            _view.Canvas.worldCamera = cam;
+    }
+
+    // Horizontal angle between where the participant looks and the panel.
+    private float OffViewAngle()
+    {
+        Transform head = ResolveHead();
+        if (head == null) return 0f;
+        Vector3 toPanel = _view.transform.position - head.position;
+        toPanel.y = 0f;
+        if (toPanel.sqrMagnitude < 1e-4f) return 0f;
+        return Vector3.Angle(FlatForward(head), toPanel);
+    }
+
+    private static Vector3 FlatForward(Transform head)
+    {
+        Vector3 f = head.forward; f.y = 0f;
+        if (f.sqrMagnitude < 1e-4f) { f = head.up; f.y = 0f; }
+        return f.sqrMagnitude < 1e-4f ? Vector3.forward : f.normalized;
     }
 
     // Same head resolution as the rest of the session (PlayerRig.Head, kept live by

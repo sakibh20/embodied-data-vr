@@ -47,6 +47,14 @@ public class SessionController : MonoBehaviour
 
     [Header("Retrace capture")]
     [SerializeField] private float retraceSampleInterval = 0.1f;
+
+    [Header("Participant reference (M51)")]
+    [Tooltip("On Start Session, re-anchor the ExperimentArea (graph, grid, markers, cue " +
+             "field) to wherever the participant is standing and facing, so the walk " +
+             "always starts right in front of them. Have them stand at the agreed spot, " +
+             "facing the walk direction, then press Start Session.")]
+    [SerializeField] private bool alignAreaToParticipantOnStart = true;
+    [SerializeField] private ExperimentArea experimentArea;
     [Tooltip("Seconds the just-walked path is drawn on the floor (same dot/line style " +
              "as the real graph) after Retrace ends, before Recall questions begin. " +
              "Shown only AFTER retrace, never while walking -- Retrace itself stays a " +
@@ -228,10 +236,27 @@ private void Awake()
             return;
         }
 
+        if (alignAreaToParticipantOnStart) AlignAreaToParticipant();
+
         BuildTrials();
         _index = -1;
         Debug.Log($"[Session] Participant {participantId}: {_trials.Count} trials.");
         NextTrial();
+    }
+
+    /// <summary>Re-anchor the ExperimentArea to the participant's current head pose
+    /// (see ExperimentArea.AlignToParticipant). Also on the context menu, and debug key
+    /// R while Idle.</summary>
+    [ContextMenu("Align Area To Participant Now")]
+    public void AlignAreaToParticipant()
+    {
+        if (experimentArea == null) experimentArea = FindAnyObjectByType<ExperimentArea>();
+        Transform head = PlayerRig.Head != null ? PlayerRig.Head : player;
+        if (experimentArea == null || head == null) return;
+
+        experimentArea.AlignToParticipant(head);
+        Debug.Log($"[Session] Area aligned to participant: head {head.position}, " +
+                  $"area centre {experimentArea.Center}, walk dir {experimentArea.Forward}.");
     }
 
     /// <summary>
@@ -715,6 +740,9 @@ private void Update()
         Keyboard kb = Keyboard.current;
         if (kb == null) return;
 
+        if (_phase == SessionPhase.Idle && kb.rKey.wasPressedThisFrame)
+            AlignAreaToParticipant();
+
         if (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame)
         {
             switch (_phase)
@@ -801,15 +829,27 @@ private void Update()
     {
         var (audio, visual) = CueLabels(r.condition);
         string order = (r.orderIndex + 1).ToString();
+
+        // M51: samples are kept in WORLD space in memory (the retrace-review graph draws
+        // them back in place), but logged in the ExperimentArea frame -- head_x = lateral,
+        // head_z = along the walk, relative to the area centre -- because the area is now
+        // re-anchored to wherever the participant stood at Start Session. With the area at
+        // the origin facing +Z (the pre-M51 layout) this is identical to world coords, so
+        // analyze_study.py (x = lateral, z = forward) and older data stay comparable.
+        if (experimentArea == null) experimentArea = FindAnyObjectByType<ExperimentArea>();
+
         foreach (var s in r.retracePath)
         {
+            Vector3 p = new Vector3(s.x, s.y, s.z);
+            if (experimentArea != null) p = experimentArea.WorldToArea(p);
+
             AppendCsvRow(ParticipantLabel, "retracing_log.csv", RetraceHeader, new[]
             {
                 ParticipantLabel, r.condition, audio, visual, order, r.datasetName,
                 s.timestampUtc, s.t.ToString("0.###", CultureInfo.InvariantCulture),
-                s.x.ToString("0.###", CultureInfo.InvariantCulture),
-                s.y.ToString("0.###", CultureInfo.InvariantCulture),
-                s.z.ToString("0.###", CultureInfo.InvariantCulture)
+                p.x.ToString("0.###", CultureInfo.InvariantCulture),
+                p.y.ToString("0.###", CultureInfo.InvariantCulture),
+                p.z.ToString("0.###", CultureInfo.InvariantCulture)
             });
         }
     }

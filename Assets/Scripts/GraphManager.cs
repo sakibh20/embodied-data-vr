@@ -31,6 +31,13 @@ public class GraphManager : MonoBehaviour
     [Tooltip("Seconds to tween the resize + centring after the graph lies flat.")]
     [SerializeField] private float scaleTweenDuration = 0.6f;
 
+    [Header("Build presentation (M52)")]
+    [Tooltip("While the dots/line are being drawn, the graph stands upright this many " +
+             "metres in front of the participant (the ExperimentArea's participant spot), " +
+             "centred on their line of sight and reading left -> right, already at its " +
+             "final size. It then turns and lies down onto the walk area.")]
+    [SerializeField] private float presentationDistance = 3.5f;
+
     private readonly List<DataPoint> _spawnedDots = new List<DataPoint>();
     private LineRenderer _lineRenderer;
     private LineRenderer _groundLineRenderer;
@@ -132,15 +139,23 @@ public class GraphManager : MonoBehaviour
 
         if (area == null) area = FindAnyObjectByType<ExperimentArea>();
 
-        // Pivot the graph on the area centre so the flip/rotation swings around it
-        // and the final graph shares the cue field's centre.
-        if (area != null) graphRoot.position = area.Center;
+        // M52: build the graph upright in FRONT of the participant at its final size,
+        // centred on their line of sight and reading left -> right (local X = their
+        // right), instead of full-size (~9.5 m) from the area centre off to one side.
+        // StartAlignment then turns it and lays it down; ApplyGraphSizeAndCentre moves it
+        // onto the area centre as before.
+        PlaceForPresentation();
 
         _generationSequence = DOTween.Sequence();
 
         // Create LineRenderer
         GameObject lineObj = new GameObject("Line");
-        lineObj.transform.SetParent(graphRoot);
+        // worldPositionStays = false: the line must sit at graphRoot's local origin.
+        // (With the default 'true' it kept its world position at creation, i.e. an
+        // offset of -graphRoot.position -- invisible while graphRoot was at the world
+        // origin, but once the area follows the participant (M51) it lifted the line
+        // ~0.8 m off the floor above the dots/grid. Fixed in M52.)
+        lineObj.transform.SetParent(graphRoot, false);
         _lineRenderer = lineObj.AddComponent<LineRenderer>();
         _lineRenderer.useWorldSpace = false;
         _lineRenderer.widthMultiplier = 0.05f;
@@ -148,7 +163,7 @@ public class GraphManager : MonoBehaviour
         _lineRenderer.material = new Material(Shader.Find("Sprites/Default"));
         
         GameObject groundLineObj = new GameObject("GroundLine");
-        groundLineObj.transform.SetParent(graphRoot);
+        groundLineObj.transform.SetParent(graphRoot, false);
         _groundLineRenderer = groundLineObj.AddComponent<LineRenderer>();
         
         _groundLineRenderer.startColor = Color.gray;
@@ -240,6 +255,66 @@ public class GraphManager : MonoBehaviour
         });
     }
 
+    // Final graph scale: the walk (local X span of the points) becomes targetWalkLength.
+    private float FinalScale()
+    {
+        int n = graphData != null ? graphData.values.Count : 0;
+        float extent = Mathf.Max(0.001f, Mathf.Max(0, n - 1) * settings.spacing);
+        return resizeGraph ? targetWalkLength / extent : 1f;
+    }
+
+    // Upright, facing the participant, centred on their line of sight, already at
+    // final scale. Baseline (value 0) on the floor, values grow upward.
+    private void PlaceForPresentation()
+    {
+        if (area == null) area = FindAnyObjectByType<ExperimentArea>();
+
+        Vector3 fwd, anchor;
+        if (area != null)
+        {
+            fwd = area.Forward;
+            anchor = area.ParticipantSpot;
+        }
+        else
+        {
+            fwd = playerCamera != null ? playerCamera.forward : Vector3.forward;
+            fwd.y = 0f;
+            if (fwd.sqrMagnitude < 1e-4f) fwd = Vector3.forward;
+            fwd.Normalize();
+            anchor = playerCamera != null ? new Vector3(playerCamera.position.x, 0f, playerCamera.position.z) : Vector3.zero;
+        }
+
+        float sc = FinalScale();
+        int n = graphData.values.Count;
+        Vector3 midLocal = new Vector3(Mathf.Max(0, n - 1) * settings.spacing * 0.5f, 0f, 0f);
+
+        Quaternion facing = Quaternion.LookRotation(fwd, Vector3.up);   // local X = participant's right
+        Vector3 centre = anchor + fwd * presentationDistance;
+
+        graphRoot.localScale = Vector3.one * sc;
+        graphRoot.rotation = facing;
+        graphRoot.position = centre - facing * (midLocal * sc);
+    }
+
+    // Rotate graphRoot to 'to' while keeping the world position of a local pivot fixed.
+    private Tween RotateAboutPivot(Quaternion to, Vector3 pivotLocal, float duration, Ease ease)
+    {
+        Quaternion from = Quaternion.identity;
+        Vector3 pivotWorld = Vector3.zero;
+        return DOVirtual.Float(0f, 1f, duration, t =>
+        {
+            Quaternion q = Quaternion.Slerp(from, to, t);
+            graphRoot.rotation = q;
+            graphRoot.position = pivotWorld - q * Vector3.Scale(graphRoot.localScale, pivotLocal);
+        })
+        .SetEase(ease)
+        .OnStart(() =>
+        {
+            from = graphRoot.rotation;
+            pivotWorld = graphRoot.TransformPoint(pivotLocal);
+        });
+    }
+
     private void StartAlignment()
     {
         // Orient to the room area when present (fixed layout), else to the player.
@@ -249,24 +324,22 @@ public class GraphManager : MonoBehaviour
 
         Quaternion alignToForward = Quaternion.LookRotation(forward) * Quaternion.Euler(0, -90f, 0);
 
+        // Pivot on the middle of the baseline (value 0, on the floor), so the graph turns
+        // on the spot -- its first point swinging toward the participant -- and then
+        // tips over onto the floor, instead of swinging around its first point (M52).
+        int n = graphData.values.Count;
+        Vector3 pivotLocal = new Vector3(Mathf.Max(0, n - 1) * settings.spacing * 0.5f, 0f, 0f);
+
         Sequence alignSeq = DOTween.Sequence();
 
-        // STEP 1
-        alignSeq.Append(
-            graphRoot.DORotateQuaternion(alignToForward, 0.8f)
-                .SetEase(Ease.OutCubic)
-        );
+        // STEP 1: turn so the walk (local X) points along the area's forward axis.
+        alignSeq.Append(RotateAboutPivot(alignToForward, pivotLocal, 0.8f, Ease.OutCubic));
 
-        // STEP 2 (relative rotation, no euler)
-        alignSeq.Append(
-            graphRoot.DORotateQuaternion(
-                alignToForward * Quaternion.Euler(90f, 0f, 0f),
-                0.8f
-            ).SetEase(Ease.InOutSine)
-        );
+        // STEP 2: lay it flat onto the floor.
+        alignSeq.Append(RotateAboutPivot(alignToForward * Quaternion.Euler(90f, 0f, 0f), pivotLocal, 0.8f, Ease.InOutSine));
 
-        // Once flat, resize the graph to the requested walk length and centre it on
-        // the area — tweened, not an instant pop — then configure the sampler.
+        // Once flat, resize (no-op now that it is built at final scale) and centre it on
+        // the area -- tweened, not an instant pop -- then configure the sampler.
         alignSeq.OnComplete(ApplyGraphSizeAndCentre);
     }
 

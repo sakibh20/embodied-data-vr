@@ -101,8 +101,15 @@ public class GridGenerator : MonoBehaviour
     private void CreateLine(Vector3 start, Vector3 end)
     {
         GameObject lineObj = new GameObject("GridLine");
-        lineObj.transform.SetParent(gridRoot);
+        // worldPositionStays = false + explicit identity: the line must live in gridRoot's
+        // (= graphRoot's) local space. With the default 'true' it kept its world
+        // rotation/scale, i.e. counter-rotated/scaled against graphRoot -- harmless only
+        // while graphRoot was unrotated and unscaled when the grid was built. Since M52
+        // the graph is built already facing the participant at final scale. See ROADMAP M52.
+        lineObj.transform.SetParent(gridRoot, false);
         lineObj.transform.localPosition = Vector3.zero;
+        lineObj.transform.localRotation = Quaternion.identity;
+        lineObj.transform.localScale = Vector3.one;
 
         LineRenderer lr = lineObj.AddComponent<LineRenderer>();
         lr.material = _lineMaterial;

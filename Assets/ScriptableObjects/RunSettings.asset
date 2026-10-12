@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: RunSettings
   m_EditorClassIdentifier: Assembly-CSharp::RunSettings
   audioMode: 2
-  runType: 0
+  runType: 2
   recallInputMode: 1
   conditionOrderMode: 3
   allowControllerLocomotion: 0
