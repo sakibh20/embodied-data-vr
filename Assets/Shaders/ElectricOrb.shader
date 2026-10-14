@@ -142,7 +142,7 @@ Shader "EmbodiedDataVR/ElectricOrb"
         float3 normalWS   : TEXCOORD0;
         float3 viewDirWS  : TEXCOORD1;
         float3 positionOS : TEXCOORD2;
-        float  seed       : TEXCOORD3;
+        nointerpolation float seed : TEXCOORD3;
         UNITY_VERTEX_INPUT_INSTANCE_ID
         UNITY_VERTEX_OUTPUT_STEREO
     };
@@ -201,7 +201,7 @@ Shader "EmbodiedDataVR/ElectricOrb"
             #pragma vertex vertHalo
             #pragma fragment fragHalo
             #pragma multi_compile_instancing
-            #pragma target 3.0
+            #pragma target 4.5
 
             Varyings vertHalo(Attributes IN) { return VertCommon(IN, _HaloSize); }
 
@@ -240,7 +240,7 @@ Shader "EmbodiedDataVR/ElectricOrb"
             #pragma vertex vertCore
             #pragma fragment fragCore
             #pragma multi_compile_instancing
-            #pragma target 3.0
+            #pragma target 4.5
 
             Varyings vertCore(Attributes IN) { return VertCommon(IN, 0.0); }
 

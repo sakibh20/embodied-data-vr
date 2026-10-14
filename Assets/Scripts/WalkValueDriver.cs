@@ -52,7 +52,15 @@ public class WalkValueDriver : MonoBehaviour
         set => feedbackSource = value;
     }
 
-    public void SetActive(bool value) => active = value;
+    /// <summary>Turn cue driving on/off. Turning it off also gates the active
+    /// condition's cues off (fade out / clear) -- otherwise they would freeze in
+    /// whatever state they were last in. See SessionController.SetPhase (M53).</summary>
+    public void SetActive(bool value)
+    {
+        if (active == value) return;
+        active = value;
+        if (!value && conditionManager != null) conditionManager.SetCuesActive(false);
+    }
 
     /// <summary>The PathSampler this driver (and therefore GraphManager) actually
     /// uses -- exposed so other components (SessionController's auto-resolve) can

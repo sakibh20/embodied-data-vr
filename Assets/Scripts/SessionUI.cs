@@ -114,7 +114,7 @@ public class SessionUI : MonoBehaviour
         {
             _view.gameObject.SetActive(true);
             _view.Title.text = "Retrace";
-            _view.Body.text = "Walk back to the start, then retrace the shape you just " +
+            _view.Body.text = "Walk back and stand on the green Start marker, then retrace the shape you just " +
                                "walked -- from memory.";
             Invoke(nameof(HidePanel), retraceInstructionSeconds);
             return;

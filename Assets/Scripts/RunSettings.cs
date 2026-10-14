@@ -5,6 +5,19 @@ using UnityEngine;
 // Simulator mode (was 1) was removed in M50, so existing RunSettings assets stay valid.
 public enum RunType { Desktop = 0, VR = 2 }
 
+/// <summary>Look of the SEMANTIC visual cue (spark), chosen per run (M55). Applies to every
+/// condition whose DensityController has "Use Semantic Visual Variant" ticked
+/// (Representative, SemanticVisual).</summary>
+public enum SemanticVisualVariant
+{
+    /// <summary>A: pointy 3D spark star (needle mesh, no ball).</summary>
+    SparkStar,
+    /// <summary>B: yellow ball with glowing spark streaks around it.</summary>
+    SparkOrb,
+    /// <summary>C: the pointy star mesh plus a warm glow and the streak rays (no ball).</summary>
+    SparkStarGlow,
+}
+
 /// <summary>How the recall (memory-test) phase collects an answer.</summary>
 public enum RecallInputMode { MultipleChoice, TextEntry }
 
@@ -60,6 +73,29 @@ public class RunSettings : ScriptableObject
              "(and block, if trialsPerCondition > 1), so a given participant's order " +
              "is reproducible, not dependent on global random state.")]
     public ConditionOrderMode conditionOrderMode = ConditionOrderMode.Sequential;
+
+    [Header("Semantic visual (M55)")]
+    [Tooltip("Which spark look the semantic-visual conditions use. A = pointy star, " +
+             "B = yellow ball with spark streaks, C = pointy star + glow + streaks. " +
+             "Changing it during Play affects newly spawned sparks.")]
+    public SemanticVisualVariant semanticVisualVariant = SemanticVisualVariant.SparkStar;
+    public GameObject sparkStarPrefab;
+    public GameObject sparkOrbPrefab;
+    public GameObject sparkStarGlowPrefab;
+
+    /// <summary>The prefab for the chosen variant (null if not assigned).</summary>
+    public GameObject SemanticVisualPrefab
+    {
+        get
+        {
+            switch (semanticVisualVariant)
+            {
+                case SemanticVisualVariant.SparkOrb: return sparkOrbPrefab;
+                case SemanticVisualVariant.SparkStarGlow: return sparkStarGlowPrefab;
+                default: return sparkStarPrefab;
+            }
+        }
+    }
 
     [Header("XR (VR)")]
     [Tooltip("Off (study default): thumbstick move/turn, teleport, climb and jump are " +

@@ -264,7 +264,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CueAudioController
   audioSource: {fileID: 0}
-  clip: {fileID: 8300000, guid: cab6e98116fc0da4b9d4154c0dbfbbe0, type: 3}
+  clip: {fileID: 8300000, guid: 7e5d4107beedf8b4aa26a729221fba1b, type: 3}
+  loopClip: {fileID: 0}
   mode: 0
   respondToValue: 1
   minPitch: 0.8
@@ -272,6 +273,11 @@ MonoBehaviour:
   minPulsesPerSecond: 1
   maxPulsesPerSecond: 8
   smoothSpeed: 5
+  fadeMilliseconds: 8
+  livePulsesPerSecond: 0
+  liveMeasuredInterval: 0
+  livePlaybackSpeed: 1
+  livePulseCount: 0
 --- !u!82 &297737334
 AudioSource:
   m_ObjectHideFlags: 0
@@ -381,7 +387,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e2cac07fcabebfc4bab5eb1f6c59359f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DensityController
-  spawnPrefab: {fileID: 8125429067791596762, guid: 824560d90cc0715499bf19397ffda437, type: 3}
+  spawnPrefab: {fileID: 1129292939552472230, guid: 4ed4d5fa5afd23249854c00464931d6d, type: 3}
+  useSemanticVisualVariant: 1
   area: {fileID: 0}
   settings: {fileID: 11400000, guid: 6ce9427ee757f406baad8a3c299dc75a, type: 2}
   areaSize: {x: 5, y: 5}
@@ -435,6 +442,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ExperimentArea
   size: {x: 4, y: 4}
+  markerGap: 0.4
+  markerDepth: 0.6
 --- !u!4 &300438504
 Transform:
   m_ObjectHideFlags: 0
@@ -999,6 +1008,8 @@ MonoBehaviour:
   participantId: 1
   trialsPerCondition: 1
   retraceSampleInterval: 0.1
+  alignAreaToParticipantOnStart: 1
+  experimentArea: {fileID: 0}
   retraceReviewSeconds: 5
   autoEndOvershoot: 0.3
   autoEndGracePeriod: 0.5
@@ -1083,7 +1094,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8ac00f283f4c7f84cbc82bc321a3c262, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AudioModeSelector
-  mode: 0
+  mode: 1
   controllers: []
 --- !u!114 &407123599
 MonoBehaviour:
@@ -1361,6 +1372,8 @@ MonoBehaviour:
   answerInputPrefab: {fileID: 4069104934078382465, guid: 15f60c45277de6e4e90ee3f7c74aebce, type: 3}
   localOffset: {x: 0, y: 0.15, z: 2}
   canvasScale: 0.0025
+  refollowAngle: 55
+  refollowDelay: 0.8
   retraceInstructionSeconds: 4
   retraceReviewPanelSeconds: 2.5
 --- !u!4 &677478254
@@ -1825,6 +1838,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DensityController
   spawnPrefab: {fileID: 2054353098026386417, guid: e568708cf6c186e4ab67de94cb0453b0, type: 3}
+  useSemanticVisualVariant: 0
   area: {fileID: 0}
   settings: {fileID: 11400000, guid: 6ce9427ee757f406baad8a3c299dc75a, type: 2}
   areaSize: {x: 5, y: 5}
@@ -1974,7 +1988,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CueAudioController
   audioSource: {fileID: 0}
-  clip: {fileID: 8300000, guid: cab6e98116fc0da4b9d4154c0dbfbbe0, type: 3}
+  clip: {fileID: 8300000, guid: 7e5d4107beedf8b4aa26a729221fba1b, type: 3}
+  loopClip: {fileID: 0}
   mode: 0
   respondToValue: 1
   minPitch: 0.8
@@ -1982,6 +1997,11 @@ MonoBehaviour:
   minPulsesPerSecond: 1
   maxPulsesPerSecond: 8
   smoothSpeed: 5
+  fadeMilliseconds: 8
+  livePulsesPerSecond: 0
+  liveMeasuredInterval: 0
+  livePlaybackSpeed: 1
+  livePulseCount: 0
 --- !u!1 &1230336071
 GameObject:
   m_ObjectHideFlags: 0
@@ -2344,7 +2364,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CueAudioController
   audioSource: {fileID: 0}
-  clip: {fileID: 8300000, guid: c831eff0d29cf13408a2cfdf3a1e1061, type: 3}
+  clip: {fileID: 8300000, guid: 0398e0a6d05d52a4b9b1c687956da6cd, type: 3}
+  loopClip: {fileID: 8300000, guid: e04943eaace9cfc45a6e5062ff067ce3, type: 3}
   mode: 0
   respondToValue: 1
   minPitch: 0.8
@@ -2352,6 +2373,11 @@ MonoBehaviour:
   minPulsesPerSecond: 1
   maxPulsesPerSecond: 8
   smoothSpeed: 5
+  fadeMilliseconds: 8
+  livePulsesPerSecond: 0
+  liveMeasuredInterval: 0
+  livePlaybackSpeed: 1
+  livePulseCount: 0
 --- !u!82 &1565056393
 AudioSource:
   m_ObjectHideFlags: 0
@@ -2461,7 +2487,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e2cac07fcabebfc4bab5eb1f6c59359f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DensityController
-  spawnPrefab: {fileID: 8125429067791596762, guid: 824560d90cc0715499bf19397ffda437, type: 3}
+  spawnPrefab: {fileID: 1129292939552472230, guid: 4ed4d5fa5afd23249854c00464931d6d, type: 3}
+  useSemanticVisualVariant: 1
   area: {fileID: 0}
   settings: {fileID: 11400000, guid: 6ce9427ee757f406baad8a3c299dc75a, type: 2}
   areaSize: {x: 5, y: 5}
@@ -2591,6 +2618,8 @@ MonoBehaviour:
   resizeGraph: 1
   targetWalkLength: 3
   scaleTweenDuration: 0.6
+  animateBuild: 0
+  presentationDistance: 3.5
 --- !u!1 &1764029742
 GameObject:
   m_ObjectHideFlags: 0
@@ -2938,7 +2967,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CueAudioController
   audioSource: {fileID: 0}
-  clip: {fileID: 8300000, guid: c831eff0d29cf13408a2cfdf3a1e1061, type: 3}
+  clip: {fileID: 8300000, guid: 0398e0a6d05d52a4b9b1c687956da6cd, type: 3}
+  loopClip: {fileID: 8300000, guid: e04943eaace9cfc45a6e5062ff067ce3, type: 3}
   mode: 0
   respondToValue: 1
   minPitch: 0.8
@@ -2946,6 +2976,11 @@ MonoBehaviour:
   minPulsesPerSecond: 1
   maxPulsesPerSecond: 8
   smoothSpeed: 5
+  fadeMilliseconds: 8
+  livePulsesPerSecond: 0
+  liveMeasuredInterval: 0
+  livePlaybackSpeed: 1
+  livePulseCount: 0
 --- !u!82 &2016803391
 AudioSource:
   m_ObjectHideFlags: 0
@@ -3056,6 +3091,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DensityController
   spawnPrefab: {fileID: 2054353098026386417, guid: e568708cf6c186e4ab67de94cb0453b0, type: 3}
+  useSemanticVisualVariant: 0
   area: {fileID: 0}
   settings: {fileID: 11400000, guid: 6ce9427ee757f406baad8a3c299dc75a, type: 2}
   areaSize: {x: 5, y: 5}

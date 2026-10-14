@@ -120,6 +120,10 @@ private void Awake()
         // ever advanced it). Still adjustable on the Idle screen (+/-) before Start.
         participantId = SuggestNextParticipantId();
 
+        // Session starts in Idle: no cues until a Walk begins (M53).
+        _walkDriver = FindAnyObjectByType<WalkValueDriver>();
+        if (_walkDriver != null) _walkDriver.SetActive(false);
+
         // 'player' is no longer resolved/cached here -- see Update, which reads
         // PlayerRig.Head live every frame (falling back to ResolvePlayerHead only
         // if nothing set it, e.g. no SessionBootstrap in the scene).
@@ -465,9 +469,10 @@ private void Awake()
         if (_phase != SessionPhase.Distractor) return;
         _result.distractorSeconds = Time.time - _phaseStart;
 
-        // Retrace: hide the line/dots and remove cues (Control) so it's pure memory.
+        // Retrace: hide the line/dots. M53 (supervisor): the trial's audio + visual cues
+        // stay ON, exactly as during Walk (they follow where the participant is standing,
+        // StandingPosition feedback), instead of switching to Control.
         graphManager.SetGraphVisible(false);
-        conditionManager.SetCondition(ConditionId.Control);
         _result.retracePath.Clear();
         _retraceTimer = 0f;
         SetPhase(SessionPhase.Retrace);
@@ -560,10 +565,25 @@ private void Awake()
         }
     }
 
+    private WalkValueDriver _walkDriver;
+
+    private void SetFeedbackArmed(bool armed)
+    {
+        if (_walkDriver == null) _walkDriver = FindAnyObjectByType<WalkValueDriver>();
+        bool walking = _phase == SessionPhase.Walk || _phase == SessionPhase.Retrace;
+        if (_walkDriver != null) _walkDriver.SetActive(armed && walking);
+    }
+
     private void SetPhase(SessionPhase phase)
     {
         _phase = phase;
         _phaseStart = Time.time;
+
+        // M53: cues run only while the participant is walking -- Walk and Retrace.
+        // M56: and even then only once they have stood on the Start marker in THIS
+        // phase (CheckAutoEndOfPhase arms it). Everywhere else (Idle, Distractor,
+        // review, Recall, between trials, walking back to the start) they are off.
+        SetFeedbackArmed(false);
         _hasVisitedStartThisPhase = false;
         PhaseChanged?.Invoke(phase);
         Debug.Log($"[Session] {(phase == SessionPhase.Idle || phase == SessionPhase.Complete ? "" : $"Trial {TrialNumber}/{TotalTrials} -> ")}{phase}");
@@ -663,7 +683,9 @@ private void Update()
     {
         Transform head = PlayerRig.Head != null ? PlayerRig.Head : ResolvePlayerHead();
 
-        if (_phase == SessionPhase.Retrace && head != null)
+        // M56: only the actual attempt is recorded -- from the moment the participant
+        // stands on the Start marker -- not the walk back to it.
+        if (_phase == SessionPhase.Retrace && head != null && _hasVisitedStartThisPhase)
         {
             _retraceTimer -= Time.deltaTime;
             if (_retraceTimer <= 0f)
@@ -699,7 +721,9 @@ private void Update()
         if (_phase != SessionPhase.TrialComplete) return;
         if (head == null || pathSampler == null || !pathSampler.IsReady) return;
 
-        bool nearStart = pathSampler.DistanceAlong(head.position) <= autoEndOvershoot;
+        if (experimentArea == null) experimentArea = FindAnyObjectByType<ExperimentArea>();
+        bool nearStart = experimentArea != null ? experimentArea.IsInStartZone(head.position)
+                                                : pathSampler.DistanceAlong(head.position) <= autoEndOvershoot;
         if (nearStart == ReadyToStartNext) return;
 
         ReadyToStartNext = nearStart;
@@ -724,12 +748,27 @@ private void Update()
         // fire almost instantly (as soon as the grace period elapses) without them
         // ever walking anything. Require they've been back near the start at some
         // point during *this* phase before the far-end check can complete it.
+        // M56: "at the start" / "at the end" now mean standing on the Start / End
+        // MARKER (past the safe gap either side of the graph zone), not merely near
+        // the first/last point. Arming also switches feedback on (see SetFeedbackArmed):
+        // walking back to the start during Retrace is silent and not recorded.
+        if (experimentArea == null) experimentArea = FindAnyObjectByType<ExperimentArea>();
         float d = pathSampler.DistanceAlong(head.position);
-        if (d <= autoEndOvershoot) _hasVisitedStartThisPhase = true;
+
+        bool atStart = experimentArea != null ? experimentArea.IsInStartZone(head.position)
+                                              : d <= autoEndOvershoot;
+        if (atStart && !_hasVisitedStartThisPhase)
+        {
+            _hasVisitedStartThisPhase = true;
+            SetFeedbackArmed(true);
+        }
 
         if (Time.time - _phaseStart < autoEndGracePeriod) return;
         if (!_hasVisitedStartThisPhase) return;
-        if (d < pathSampler.TotalLength + autoEndOvershoot) return;
+
+        bool atEnd = experimentArea != null ? experimentArea.IsInEndZone(head.position)
+                                            : d >= pathSampler.TotalLength + autoEndOvershoot;
+        if (!atEnd) return;
 
         if (_phase == SessionPhase.Walk) EndWalk();
         else EndRetrace();

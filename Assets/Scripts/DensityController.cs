@@ -16,6 +16,9 @@ public class DensityController : MonoBehaviour
 {
     [Header("Prefab")]
     [SerializeField] private GameObject spawnPrefab;
+    [Tooltip("Semantic-visual conditions (spark): spawn the variant chosen in RunSettings " +
+             "(Semantic Visual Variant) instead of Spawn Prefab. Spawn Prefab is the fallback. (M55)")]
+    [SerializeField] private bool useSemanticVisualVariant;
 
     [Header("Area")]
     [Tooltip("Shared room area the cue field is centred on. Auto-found if left empty. " +
@@ -73,7 +76,12 @@ public class DensityController : MonoBehaviour
     private GameObject CreateObject()
     {
         Vector3 pos = GetRandomPosition();
-        GameObject obj = Instantiate(spawnPrefab, pos, Quaternion.identity, transform);
+        GameObject prefab = spawnPrefab;
+        if (useSemanticVisualVariant && StudyConfig.Settings != null &&
+            StudyConfig.Settings.SemanticVisualPrefab != null)
+            prefab = StudyConfig.Settings.SemanticVisualPrefab;
+
+        GameObject obj = Instantiate(prefab, pos, Quaternion.identity, transform);
 
         float scale = Random.Range(sizeRange.x, sizeRange.y);
         if (scaleTweenSeconds > 0f && isActiveAndEnabled)

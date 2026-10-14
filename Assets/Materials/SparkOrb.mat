@@ -1,0 +1,48 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: SparkOrb
+  m_Shader: {fileID: 4800000, guid: 3b20e74f6194a194b89ba5156326aae9, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords: []
+  m_InvalidKeywords: []
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 1
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs: []
+    m_Ints: []
+    m_Floats:
+    - _BobAmplitude: 0.04
+    - _BobSpeed: 0.7
+    - _CentrePower: 3
+    - _FlickerAmount: 0.35
+    - _FlickerSpeed: 14
+    - _GlowIntensity: 0.3
+    - _RayCount: 18
+    - _RayIntensity: 1.15
+    - _RayJag: 0.08
+    - _RayLength: 3
+    - _RayWidth: 0.28
+    - _RimPower: 2.2
+    - _SpinSpeed: 0.25
+    m_Colors:
+    - _CoreColor: {r: 1, g: 0.75, b: 0.08, a: 1}
+    - _CoreHot: {r: 1, g: 0.98, b: 0.85, a: 1}
+    - _RayBaseColor: {r: 1, g: 0.95, b: 0.72, a: 1}
+    - _RayTipColor: {r: 1, g: 0.5, b: 0.06, a: 1}
+    - _RimColor: {r: 0.95, g: 0.4, b: 0.02, a: 1}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1

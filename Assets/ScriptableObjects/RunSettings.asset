@@ -12,8 +12,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e45d4faedd43c6d42a991df985655275, type: 3}
   m_Name: RunSettings
   m_EditorClassIdentifier: Assembly-CSharp::RunSettings
-  audioMode: 2
-  runType: 2
+  audioMode: 1
+  runType: 0
   recallInputMode: 1
   conditionOrderMode: 3
+  semanticVisualVariant: 1
+  sparkStarPrefab: {fileID: 1129292939552472230, guid: 4ed4d5fa5afd23249854c00464931d6d, type: 3}
+  sparkOrbPrefab: {fileID: 6674757808408895671, guid: 26e57f1bf1269384495784994e46625d, type: 3}
+  sparkStarGlowPrefab: {fileID: 5322528433797878495, guid: 13f59266f225aeb4b93d24e3e2bb9d21, type: 3}
   allowControllerLocomotion: 0

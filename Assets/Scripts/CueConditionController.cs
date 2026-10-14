@@ -66,6 +66,41 @@ public class CueConditionController : ConditionBase
         Apply(normalizedValue);
     }
 
+    // M53: deactivating a GameObject stops its AudioSources instantly (a pop). If the
+    // cue is still audible, fade it out first and deactivate a moment later.
+    private bool _pendingDeactivate;
+
+    public override void Activate()
+    {
+        _pendingDeactivate = false;
+        CancelInvoke(nameof(FinishDeactivate));
+        base.Activate();
+    }
+
+    public override void Deactivate()
+    {
+        if (!gameObject.activeSelf) return;
+
+        if (isActiveAndEnabled && audioController != null && audioController.IsAudible)
+        {
+            _cuesActive = false;
+            densityController?.Clear();
+            audioController.SetMuted(true);   // per-sample fade
+            _pendingDeactivate = true;
+            CancelInvoke(nameof(FinishDeactivate));
+            Invoke(nameof(FinishDeactivate), audioController.FadeOutSeconds);
+            return;
+        }
+        base.Deactivate();
+    }
+
+    private void FinishDeactivate()
+    {
+        if (!_pendingDeactivate) return;
+        _pendingDeactivate = false;
+        base.Deactivate();
+    }
+
     public override void SetNormalizedValue(float value)
     {
         normalizedValue = Mathf.Clamp01(value);

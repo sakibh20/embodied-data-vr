@@ -31,7 +31,14 @@ public class GraphManager : MonoBehaviour
     [Tooltip("Seconds to tween the resize + centring after the graph lies flat.")]
     [SerializeField] private float scaleTweenDuration = 0.6f;
 
-    [Header("Build presentation (M52)")]
+    [Header("Build animation")]
+    [Tooltip("OFF (study default, M53): the graph appears directly in its final place " +
+             "on the floor -- participants never see it upright/turning before it is " +
+             "placed (supervisor: they must not memorise it from that view). ON: the " +
+             "M52 animation (drawn upright in front of the participant, then laid down).")]
+    [SerializeField] private bool animateBuild = false;
+
+    [Header("Build presentation (M52, only when Animate Build is on)")]
     [Tooltip("While the dots/line are being drawn, the graph stands upright this many " +
              "metres in front of the participant (the ExperimentArea's participant spot), " +
              "centred on their line of sight and reading left -> right, already at its " +
@@ -122,6 +129,12 @@ public class GraphManager : MonoBehaviour
         {
             Destroy(_lineRenderer.gameObject);
         }
+        // The baseline was never destroyed, so one GroundLine object piled up per trial
+        // (fixed M53).
+        if (_groundLineRenderer != null)
+        {
+            Destroy(_groundLineRenderer.gameObject);
+        }
 
         graphRoot.rotation = Quaternion.identity;
         graphRoot.localScale = Vector3.one;   // clear any fit-to-area scale from a prior gen
@@ -139,6 +152,12 @@ public class GraphManager : MonoBehaviour
 
         if (area == null) area = FindAnyObjectByType<ExperimentArea>();
 
+        if (!animateBuild)
+        {
+            BuildInPlace();
+            return;
+        }
+
         // M52: build the graph upright in FRONT of the participant at its final size,
         // centred on their line of sight and reading left -> right (local X = their
         // right), instead of full-size (~9.5 m) from the area centre off to one side.
@@ -147,32 +166,7 @@ public class GraphManager : MonoBehaviour
         PlaceForPresentation();
 
         _generationSequence = DOTween.Sequence();
-
-        // Create LineRenderer
-        GameObject lineObj = new GameObject("Line");
-        // worldPositionStays = false: the line must sit at graphRoot's local origin.
-        // (With the default 'true' it kept its world position at creation, i.e. an
-        // offset of -graphRoot.position -- invisible while graphRoot was at the world
-        // origin, but once the area follows the participant (M51) it lifted the line
-        // ~0.8 m off the floor above the dots/grid. Fixed in M52.)
-        lineObj.transform.SetParent(graphRoot, false);
-        _lineRenderer = lineObj.AddComponent<LineRenderer>();
-        _lineRenderer.useWorldSpace = false;
-        _lineRenderer.widthMultiplier = 0.05f;
-        _lineRenderer.positionCount = 0;
-        _lineRenderer.material = new Material(Shader.Find("Sprites/Default"));
-        
-        GameObject groundLineObj = new GameObject("GroundLine");
-        groundLineObj.transform.SetParent(graphRoot, false);
-        _groundLineRenderer = groundLineObj.AddComponent<LineRenderer>();
-        
-        _groundLineRenderer.startColor = Color.gray;
-        _groundLineRenderer.endColor = Color.gray;
-
-        _groundLineRenderer.useWorldSpace = false;
-        _groundLineRenderer.widthMultiplier = 0.03f;
-        _groundLineRenderer.positionCount = 0;
-        _groundLineRenderer.material = new Material(Shader.Find("Sprites/Default"));
+        CreateLineRenderers();
 
         Vector3[] positions = new Vector3[graphData.values.Count];
 
@@ -220,7 +214,88 @@ public class GraphManager : MonoBehaviour
             // is what clears it now. See ROADMAP.md M36.
         });
     }
-    
+
+    // M53 (supervisor): no pre-placement visualisation. The whole graph -- dots, line,
+    // value tags, grid -- is created directly in its final pose lying on the floor of
+    // the ExperimentArea (same pose StartAlignment + ApplyGraphSizeAndCentre end in),
+    // and the sampler / Start-End markers are configured in the same frame.
+    private void BuildInPlace()
+    {
+        Vector3 forward = area != null ? area.Forward
+                        : (playerCamera != null ? playerCamera.forward : Vector3.forward);
+        forward.y = 0f;
+        if (forward.sqrMagnitude < 1e-4f) forward = Vector3.forward;
+
+        Quaternion flat = Quaternion.LookRotation(forward.normalized) * Quaternion.Euler(0f, -90f, 0f)
+                        * Quaternion.Euler(90f, 0f, 0f);
+        float sc = FinalScale();
+
+        int n = graphData.values.Count;
+        float minV = graphData.values[0], maxV = graphData.values[0];
+        foreach (var v in graphData.values) { if (v < minV) minV = v; if (v > maxV) maxV = v; }
+        Vector3 localCentre = new Vector3(Mathf.Max(0, n - 1) * settings.spacing * 0.5f,
+                                          (minV + maxV) * 0.5f * settings.heightScale, 0f);
+        Vector3 centreTarget = area != null ? area.Center : graphRoot.position;
+
+        graphRoot.localScale = Vector3.one * sc;
+        graphRoot.rotation = flat;
+        graphRoot.position = centreTarget - flat * (sc * localCentre);
+
+        CreateLineRenderers();
+        _lineRenderer.positionCount = n;
+        _groundLineRenderer.positionCount = n;
+
+        for (int i = 0; i < n; i++)
+        {
+            Vector3 localPos = new Vector3(i * settings.spacing, graphData.values[i] * settings.heightScale, 0f);
+
+            DataPoint dot = Instantiate(dataPoint, graphRoot);
+            dot.Init(i, graphData);
+            dot.transform.localPosition = localPos;
+            dot.transform.localScale = Vector3.one * settings.dotSize;
+            _spawnedDots.Add(dot);
+
+            _lineRenderer.SetPosition(i, localPos);
+            _groundLineRenderer.SetPosition(i, new Vector3(localPos.x, 0f, 0f));
+        }
+
+        foreach (DataPoint point in _spawnedDots) point.Show();
+
+        if (gridGenerator != null)
+            gridGenerator.GenerateGrid(graphData, settings, graphRoot);
+
+        FinishGeneration();
+    }
+
+    private void CreateLineRenderers()
+    {
+        // Create LineRenderer
+        GameObject lineObj = new GameObject("Line");
+        // worldPositionStays = false: the line must sit at graphRoot's local origin.
+        // (With the default 'true' it kept its world position at creation, i.e. an
+        // offset of -graphRoot.position -- invisible while graphRoot was at the world
+        // origin, but once the area follows the participant (M51) it lifted the line
+        // ~0.8 m off the floor above the dots/grid. Fixed in M52.)
+        lineObj.transform.SetParent(graphRoot, false);
+        _lineRenderer = lineObj.AddComponent<LineRenderer>();
+        _lineRenderer.useWorldSpace = false;
+        _lineRenderer.widthMultiplier = 0.05f;
+        _lineRenderer.positionCount = 0;
+        _lineRenderer.material = new Material(Shader.Find("Sprites/Default"));
+        
+        GameObject groundLineObj = new GameObject("GroundLine");
+        groundLineObj.transform.SetParent(graphRoot, false);
+        _groundLineRenderer = groundLineObj.AddComponent<LineRenderer>();
+        
+        _groundLineRenderer.startColor = Color.gray;
+        _groundLineRenderer.endColor = Color.gray;
+
+        _groundLineRenderer.useWorldSpace = false;
+        _groundLineRenderer.widthMultiplier = 0.03f;
+        _groundLineRenderer.positionCount = 0;
+        _groundLineRenderer.material = new Material(Shader.Find("Sprites/Default"));
+    }
+
     private Tween CreateDotTween(Vector3 localPos, int index)
     {
         //GameObject dot = GameObject.CreatePrimitive(PrimitiveType.Sphere);
@@ -463,13 +538,14 @@ private void ConfigureSampler()
         if (area == null) return;   // nothing sensible to size/centre the markers on
 
         Vector3 dir = walkDir.sqrMagnitude > 0.0001f ? walkDir.normalized : Vector3.forward;
-        float margin = pathSampler != null ? pathSampler.RegionMargin : 0.3f;
 
-        Vector3 startZoneEdge = area.Center - dir * (area.Depth * 0.5f);
-        Vector3 endZoneEdge = area.Center + dir * (area.Depth * 0.5f);
+        // M56: markers sit past a safe gap from the graph zone (Start | gap | graph |
+        // gap | End) and have their own depth -- both configured on ExperimentArea.
+        Vector3 startZoneEdge = area.StartMarkerInnerEdge;
+        Vector3 endZoneEdge = area.EndMarkerInnerEdge;
 
         float halfWidth = area.Width * 0.5f;
-        float halfDepth = margin;
+        float halfDepth = area.MarkerDepth * 0.5f;
 
         _endpointMarkers.Show(startZoneEdge, endZoneEdge, dir, halfWidth, halfDepth);
     }

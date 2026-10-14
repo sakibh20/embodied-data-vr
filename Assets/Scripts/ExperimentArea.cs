@@ -16,12 +16,32 @@ public class ExperimentArea : MonoBehaviour
              "Equal values = square, unequal = rectangle.")]
     [SerializeField] private Vector2 size = new Vector2(4f, 4f);
 
-    [Header("Participant reference (M51)")]
-    [Tooltip("When the session starts, the area is re-anchored to the participant: its " +
-             "walk axis points where they are facing and its near edge sits this many " +
-             "metres in front of them. 0.5 = they are standing on the middle of the " +
-             "Start marker (which is 2 x regionMargin = 1 m deep, just outside the near edge).")]
-    [SerializeField] private float participantStandOffset = 0.5f;
+    [Header("Start / End zones (M56)")]
+    [Tooltip("Safe gap (metres) between the graph zone (this area's near/far edge) and the " +
+             "Start / End markers. Standing in the gap gives no feedback and does not count " +
+             "as being at the start or the end -- a transition buffer.")]
+    [SerializeField] private float markerGap = 0.4f;
+    [Tooltip("Depth (metres, along the walk) of the Start and End marker zones.")]
+    [SerializeField] private float markerDepth = 0.6f;
+
+    public float MarkerGap => markerGap;
+    public float MarkerDepth => markerDepth;
+
+    // Layout along the walk axis (area frame z, from the centre):
+    //   Start marker | gap | ---------- graph zone (Depth) ---------- | gap | End marker
+    private float NearZoneEdge => size.y * 0.5f + markerGap;   // |z| where a marker begins
+
+    /// <summary>True when the position is on (or beyond) the Start marker -- i.e. past
+    /// the safe gap on the near side. Height and lateral position are ignored.</summary>
+    public bool IsInStartZone(Vector3 world) => WorldToArea(world).z <= -NearZoneEdge;
+
+    /// <summary>True when the position is on (or beyond) the End marker.</summary>
+    public bool IsInEndZone(Vector3 world) => WorldToArea(world).z >= NearZoneEdge;
+
+    /// <summary>World position of the inner edge (towards the graph) of the Start / End
+    /// marker, on the centre line, at floor height.</summary>
+    public Vector3 StartMarkerInnerEdge => Center - Forward * NearZoneEdge;
+    public Vector3 EndMarkerInnerEdge => Center + Forward * NearZoneEdge;
 
     public Vector3 Center => transform.position;
     public Vector3 Right => transform.right;      // width axis (lateral)
@@ -37,7 +57,8 @@ public class ExperimentArea : MonoBehaviour
     /// <summary>
     /// Re-anchor the area to the participant (M51): rotate it so its walk axis (Forward)
     /// points the way they are facing (yaw only), and move it so its near edge is
-    /// participantStandOffset in front of their feet. Floor height (Y) is kept. Everything
+    /// in front of them such that they stand in the middle of the Start marker (M56: past
+    /// the safe gap). Floor height (Y) is kept. Everything
     /// that lays out from the area -- graph, grid, Start/End markers, cue field -- follows
     /// on the next graph generation / spawn.
     /// </summary>
@@ -57,14 +78,15 @@ public class ExperimentArea : MonoBehaviour
 
         Vector3 feet = new Vector3(head.position.x, transform.position.y, head.position.z);
         transform.SetPositionAndRotation(
-            feet + fwd * (size.y * 0.5f + participantStandOffset),
+            feet + fwd * (NearZoneEdge + markerDepth * 0.5f),
             Quaternion.LookRotation(fwd, Vector3.up));
     }
 
     /// <summary>Where the participant stands (on the floor) relative to this area:
-    /// participantStandOffset before the near edge, on the centre line. Equals the
+    /// the middle of the Start marker (gap + half its depth before the near edge), on the
+    /// centre line. Equals the
     /// participant's feet right after AlignToParticipant.</summary>
-    public Vector3 ParticipantSpot => Center - Forward * (size.y * 0.5f + participantStandOffset);
+    public Vector3 ParticipantSpot => Center - Forward * (NearZoneEdge + markerDepth * 0.5f);
 
     /// <summary>
     /// World position -> area frame: x = lateral (along Right), y = height above the

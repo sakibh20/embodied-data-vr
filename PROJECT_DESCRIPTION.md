@@ -22,9 +22,9 @@ offset/height), then reconstruct it from memory. We test whether adding sensory
 |----|------------------|---------------------------|------------|-----------|-----------------------|---------|
 | 0  | `Control`        | `Condition_Control`       | none       | none      | —                     | embodied baseline: graph + grid only |
 | 1  | `Abstract`       | `Condition_Abstract`      | sphere (`DensityObject`) | beep | yes | generic audio + generic visual |
-| 2  | `Representative` | `Condition_Representative`| spark (`SparkObject`)    | electric hum | yes | representative audio + representative visual |
-| 3  | `SemanticAudio`  | `Condition_SemanticAudio` | sphere (`DensityObject`) | electric hum | yes | representative audio + generic visual |
-| 4  | `SemanticVisual` | `Condition_SemanticVisual`| spark (`SparkObject`)    | beep | yes | representative visual + generic audio |
+| 2  | `Representative` | `Condition_Representative`| yellow spark star (`SparkObject`) | electric zap | yes | representative audio + representative visual |
+| 3  | `SemanticAudio`  | `Condition_SemanticAudio` | sphere (`DensityObject`) | electric zap | yes | representative audio + generic visual |
+| 4  | `SemanticVisual` | `Condition_SemanticVisual`| yellow spark star (`SparkObject`) | beep | yes | representative visual + generic audio |
 
 > M47: a clean 2×2 (audio semantic/plain × visual semantic/plain) + Control, matching the
 > supervisor's data-notes doc (its c1..c5 = Representative, Abstract, SemanticAudio,
@@ -40,8 +40,12 @@ for every trial, then `Complete`.
 
 - **Walk** — participant walks the graph; cues play; the graph line/dots are visible.
 - **Distractor** — count backwards from a random number (300–999) in 3s (working-memory wipe).
-- **Retrace** — graph hidden, cues removed (forced to `Control`); participant re-walks the
-  shape from memory; their floor path is sampled. Nothing is drawn from this data while
+- **Retrace** — graph hidden (grid stays); since M53 the trial's **audio + visual cues stay
+  on** exactly as in Walk (supervisor), following where the participant stands
+  (StandingPosition feedback, so they reveal nothing the participant isn't already doing).
+  Previously forced to `Control`. Participant re-walks the shape from memory; their floor
+  path is sampled. Cues run ONLY in Walk and Retrace (`SessionController.SetPhase` gates
+  `WalkValueDriver`), never during Distractor, review, Recall or between trials. Nothing is drawn from this data while
   they're still walking — Retrace stays a pure memory test.
 - **RetraceReview** (M44) — once Retrace ends, `GraphManager.ShowRetraceGraph` draws the
   path the participant just walked as a dot+line graph, in the *same* visual style as the
@@ -60,6 +64,8 @@ for every trial, then `Complete`.
   CheckReadyToStartNext`) before `SessionUI` offers a "Start Next Trial" button
   (`SessionController.StartNextTrial`). Keeps the next graph from forming around the
   participant while they're still standing at the far end of the previous corridor.
+
+(M56) Layout along the walk: **Start marker | safe gap | graph zone | safe gap | End marker** (`ExperimentArea.markerGap` 0.4 m, `markerDepth` 0.6 m). Walk/Retrace are armed only once the participant stands on the Start marker in that phase -- cues and retrace logging start then -- and end when they reach the End marker; the gaps are silent transition buffers.
 
 Floor **Start**/**End** markers (a coloured rectangle + `TextMeshPro` label lying flat
 on the ground, `EndpointMarkers.cs`, M39/M40) mark both ends of the current trial's walk
@@ -230,9 +236,11 @@ affect study results.
   at body/face height on the walk. `cueField3D = false` restores the old floor-plane scatter.
   Random size `[0.1, 0.3]`; objects scale in/out over `scaleTweenSeconds` (0.3 s) instead of popping.
 - **Looks (M48):** Abstract = `SoftOrb` shader/material: neutral, softly lit pearl orb (no glow,
-  no colour temperature, so it stays generic). Semantic = `ElectricOrb` shader (rewritten):
-  dark plasma glass with thick crawling electric arcs, flicker + occasional surges and a
-  built-in additive halo (cameras have post-processing off, so no bloom is needed). Both float
+  no colour temperature, so it stays generic). Semantic = **chosen per run (M55): `RunSettings.semanticVisualVariant`** -- A `Spark_A_Star` (pointy star), B `Spark_B_Orb` (yellow ball + spark streaks, `SparkOrb`), C `Spark_C_StarGlow` (star mesh + child glow/streak sphere, `SparkGlow`); compare with Tools > Study Visuals > Render Spark Variants. Default A = **`SparkStar`** (M54: no ball -- a spiky 3D starburst mesh, `Assets/Meshes/SparkStar.asset` built by Tools > Study Visuals > Rebuild Spark Star Mesh: tiny white-hot core + 30 sharp needles, yellow -> orange tips, per-spike length crackle, own orientation + slow spin per star). Before M54: `SparkOrb` shader/material
+  (M53, supervisor feedback, matched to `Sources/spark_reference.png`): a yellow ball with a
+  white-hot centre and many thin, straight, tapering spark streaks (yellow-white to orange)
+  that flicker and change length per orb; streaks drawn in-shader around the ball (no
+  post-processing/bloom needed). Replaced the M48 blue `ElectricOrb` (kept in the project, unused). Both float
   gently, each orb on its own timing; no shadows, no colliders (colliders would block the VR
   rig in a filled room). Preview without Play: **Tools > Study Visuals > Render Cue Preview**.
 - **Study impact:** the density→value gain (5..100) is identical across the 4 cue
@@ -243,7 +251,23 @@ affect study results.
 - **Pitch** = `lerp(minPitch, maxPitch, norm)` = `lerp(0.8, 1.5, norm)`, smoothed toward
   target at `smoothSpeed = 5` (exponential, ~0.2 s time-constant).
 - **Tempo** = pulses/sec `pps = lerp(minPPS, maxPPS, norm)` = `lerp(1, 8, norm)`;
-  pulse interval `= 1 / pps`; each pulse restarts the clip (non-overlapping).
+  pulse interval `= 1 / pps`. Tempo changes how OFTEN the clip plays, never its speed:
+  in `TempoOnly` the clip always plays at pitch 1 (supervisor, M53). A new pulse starts on
+  a fresh voice while the previous one fades out (8 ms), so pulses never pile up.
+- **Clips (M53):** semantic audio = Freesound #512471 "Electric zap" (michael_grinnell,
+  **CC0**): `spark_zap_pulse.wav` (110 ms, so pulses stay distinct up to 8/s) and
+  `spark_zap_loop_1s.wav` (zap x4, seamless 1 s loop, used for continuous `PitchOnly`).
+  Generic audio = `beep_matched.wav`. All three normalised to **-10 LUFS** -- before M53 the
+  old `electric3.wav` was ~18 dB quieter than the beep (a loudness confound). Built by
+  `Analysis/make_cue_clips.py`; imported as PCM.
+- **Click-free (M53):** every voice has a `DeclickGain` filter (per-sample gain ramp,
+  `fadeMilliseconds` = 8) and every clip gets baked raised-cosine fades at load, so starts,
+  stops, mutes, pulse cut-offs, mode changes and condition switches never pop. Verified by
+  recording the real output with a pure-sine test clip: 0 discontinuities in 34 s across
+  all of those events (`Assets/Scripts/Dev/AudioOutputRecorder.cs`).
+- **Study setting (M57): `TempoOnly`** -- per the supervisor, only the repeat rate changes;
+  the clip itself always plays at normal speed/pitch. Check live in the Inspector on the
+  active condition's CueAudioController: *Live Playback Speed* must read 1.00.
 - **Modes** (`AudioMode`, set session-wide): `PitchOnly` (continuous loop, pitch varies),
   `TempoOnly` (pulses, pitch held at 1), `Both` (pulses whose rate + pitch vary).
 - **Static** (`respondToValue = false`): steady hum at pitch ≈ 1, ignores the walk.
