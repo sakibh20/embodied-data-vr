@@ -74,6 +74,14 @@ public class RunSettings : ScriptableObject
              "is reproducible, not dependent on global random state.")]
     public ConditionOrderMode conditionOrderMode = ConditionOrderMode.Sequential;
 
+    [Header("Trials per condition (M59)")]
+    [Tooltip("How many trials (iterations) each condition gets, run IN A ROW: all n trials " +
+             "of the first condition, then all n of the next, etc. Each trial has its own " +
+             "recall questions; the post-condition questionnaire comes after the n-th. " +
+             "Each trial uses the next dataset in the pool, so the pool needs " +
+             "5 x n datasets to avoid repeats.")]
+    [Range(1, 10)] public int trialsPerCondition = 1;
+
     [Header("Semantic visual (M55)")]
     [Tooltip("Which spark look the semantic-visual conditions use. A = pointy star, " +
              "B = yellow ball with spark streaks, C = pointy star + glow + streaks. " +

@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c235009e1381d474486f6b4d108fc601, type: 3}
+  m_Name: ConsentForm
+  m_EditorClassIdentifier: Assembly-CSharp::ConsentDefinition
+  version: draft-1
+  title: Before we start
+  body: "Please read the points below. Ask the researcher if anything is unclear.\n\n\u2022
+    I have read the study information sheet and had the chance to ask questions.\n\u2022
+    Taking part is voluntary. I can stop at any time without giving a reason.\n\u2022
+    My movements in the virtual environment and my answers are recorded under a participant
+    code, not my name.\n\u2022 The anonymised data may be used for research and publications.\n\u2022
+    I can take off the headset at any time if I feel unwell."
+  question: Do you agree to take part?
+  agreeLabel: I agree
+  declineLabel: I do not agree
+  declinedMessage: Thank you. The study will not start. Please tell the researcher.

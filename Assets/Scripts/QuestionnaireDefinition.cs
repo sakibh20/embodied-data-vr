@@ -32,10 +32,12 @@ public class QuestionnaireItem
 [CreateAssetMenu(fileName = "PostConditionQuestionnaire", menuName = "Embodied Data VR/Post-Condition Questionnaire")]
 public class QuestionnaireDefinition : ScriptableObject
 {
-    public string title = "About the walk you just did";
+    public string title = "About this part of the study";
+    [Tooltip("Shown on its own screen (with a Start button) before the first item (M59).")]
     [TextArea(2, 4)]
-    public string intro = "Please answer these questions about the walk you just completed. " +
-                          "Point at your answer and press the trigger.";
+    public string intro = "You have finished this part of the study. Please answer the following " +
+                          "questions about the walks you just completed. Point at your answer " +
+                          "and press the trigger.";
     public List<QuestionnaireItem> items = new List<QuestionnaireItem>();
 
     public int Count => items != null ? items.Count : 0;

@@ -16,6 +16,7 @@ MonoBehaviour:
   runType: 0
   recallInputMode: 1
   conditionOrderMode: 3
+  trialsPerCondition: 1
   semanticVisualVariant: 2
   sparkStarPrefab: {fileID: 1129292939552472230, guid: 4ed4d5fa5afd23249854c00464931d6d, type: 3}
   sparkOrbPrefab: {fileID: 6674757808408895671, guid: 26e57f1bf1269384495784994e46625d, type: 3}

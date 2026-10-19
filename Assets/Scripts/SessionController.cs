@@ -42,11 +42,17 @@ public class SessionController : MonoBehaviour
     [Header("Design")]
     [SerializeField] private List<GraphData> datasetPool = new List<GraphData>();
     [SerializeField] private int participantId = 1;
-    [Tooltip("1 or 2 per the plan (2 where session length allows).")]
-    [SerializeField, Range(1, 2)] private int trialsPerCondition = 1;
+    // Trials per condition now lives on RunSettings (M59).
+    private int TrialsPerCondition =>
+        StudyConfig.Settings != null ? Mathf.Max(1, StudyConfig.Settings.trialsPerCondition) : 1;
 
     [Header("Retrace capture")]
     [SerializeField] private float retraceSampleInterval = 0.1f;
+
+    [Header("Consent (M59)")]
+    [Tooltip("Shown once at the start of each session, before the first trial. " +
+             "Leave empty to skip.")]
+    [SerializeField] private ConsentDefinition consentForm;
 
     [Header("Post-condition questionnaire (M58)")]
     [Tooltip("Asked once after each condition's LAST trial (not after every trial). " +
@@ -167,6 +173,15 @@ private void Awake()
     // ---- Post-condition questionnaire (M58) ----
     private int _qnIndex;
     private int[] _qnResponses;   // -1 = not answered yet
+    /// <summary>True while the questionnaire's intro screen is shown (M59), before item 1.</summary>
+    public bool QnShowingIntro { get; private set; }
+
+    public void QnBeginItems()
+    {
+        if (_phase != SessionPhase.Questionnaire || !QnShowingIntro) return;
+        QnShowingIntro = false;
+        PhaseChanged?.Invoke(_phase);
+    }
 
     public QuestionnaireDefinition Questionnaire => postConditionQuestionnaire;
     public QuestionnaireItem CurrentQnItem =>
@@ -191,7 +206,9 @@ private void Awake()
     /// questionnaires.csv and continues to TrialComplete.</summary>
     public void QnNext()
     {
-        if (_phase != SessionPhase.Questionnaire || CurrentQnResponse < 0) return;
+        if (_phase != SessionPhase.Questionnaire) return;
+        if (QnShowingIntro) { QnBeginItems(); return; }
+        if (CurrentQnResponse < 0) return;
         if (_qnIndex < QnCount - 1) { _qnIndex++; PhaseChanged?.Invoke(_phase); return; }
 
         WriteQuestionnaireCsv();
@@ -287,6 +304,61 @@ private void Awake()
     [ContextMenu("Start Session")]
     public void StartSession()
     {
+        if (_phase != SessionPhase.Idle && _phase != SessionPhase.Consent) return;
+
+        // M59: the consent screen comes first. The area is aligned now, while the
+        // participant still stands where the researcher placed them.
+        if (consentForm != null && _phase == SessionPhase.Idle)
+        {
+            if (alignAreaToParticipantOnStart) AlignAreaToParticipant();
+            ConsentDeclined = false;
+            SetPhase(SessionPhase.Consent);
+            return;
+        }
+        BeginTrials(alignArea: consentForm == null);
+    }
+
+    // ---- Consent (M59) ----
+    public ConsentDefinition ConsentForm => consentForm;
+    public bool ConsentDeclined { get; private set; }
+
+    public void ConsentAgree()
+    {
+        if (_phase != SessionPhase.Consent || ConsentDeclined) return;
+        WriteConsentCsv("agreed");
+        BeginTrials(alignArea: false);
+    }
+
+    public void ConsentDecline()
+    {
+        if (_phase != SessionPhase.Consent || ConsentDeclined) return;
+        WriteConsentCsv("declined");
+        ConsentDeclined = true;
+        PhaseChanged?.Invoke(_phase);
+    }
+
+    /// <summary>From the "declined" message back to the researcher's Idle screen.</summary>
+    public void ConsentBackToIdle()
+    {
+        if (_phase != SessionPhase.Consent) return;
+        ConsentDeclined = false;
+        SetPhase(SessionPhase.Idle);
+    }
+
+    private static readonly string[] ConsentHeader =
+        { "participant_id", "consent_version", "response", "timestamp" };
+
+    private void WriteConsentCsv(string response)
+    {
+        AppendCsvRow(ParticipantLabel, "consent.csv", ConsentHeader, new[]
+        {
+            ParticipantLabel, consentForm != null ? consentForm.version : "", response,
+            DateTime.UtcNow.ToString("o")
+        });
+    }
+
+    private void BeginTrials(bool alignArea)
+    {
         if (graphManager == null || conditionManager == null)
         {
             Debug.LogError("[Session] Missing GraphManager/ConditionManager reference.");
@@ -298,7 +370,7 @@ private void Awake()
             return;
         }
 
-        if (alignAreaToParticipantOnStart) AlignAreaToParticipant();
+        if (alignArea && alignAreaToParticipantOnStart) AlignAreaToParticipant();
 
         BuildTrials();
         _index = -1;
@@ -353,19 +425,22 @@ private void Awake()
             ? StudyConfig.Settings.conditionOrderMode
             : ConditionOrderMode.Sequential;
 
-        for (int block = 0; block < trialsPerCondition; block++)
+        // M59: blocked design -- one condition order per participant, and each
+        // condition's trials run back to back (A A A, B B B, ...). Every trial still
+        // takes the next dataset in the participant-rotated pool.
+        int reps = TrialsPerCondition;
+        ConditionId[] condOrder = BuildConditionOrder(mode, 0);
+        for (int k = 0; k < n; k++)
         {
-            ConditionId[] blockOrder = BuildConditionOrder(mode, block);
-            for (int k = 0; k < n; k++)
+            for (int rep = 0; rep < reps; rep++)
             {
-                var cond = blockOrder[k];
                 var ds = datasetPool[(startDs + order) % datasetPool.Count];
                 _trials.Add(new TrialSpec
                 {
-                    condition = cond,
+                    condition = condOrder[k],
                     dataset = ds,
                     orderIndex = order,
-                    trialInCondition = block
+                    trialInCondition = rep
                 });
                 order++;
             }
@@ -620,6 +695,7 @@ private void Awake()
                 IsLastTrialOfCondition(_index))
             {
                 _qnIndex = 0;
+                QnShowingIntro = !string.IsNullOrEmpty(postConditionQuestionnaire.intro);
                 _qnResponses = new int[postConditionQuestionnaire.Count];
                 for (int i = 0; i < _qnResponses.Length; i++) _qnResponses[i] = -1;
                 SetPhase(SessionPhase.Questionnaire);
@@ -656,7 +732,7 @@ private void Awake()
         SetFeedbackArmed(false);
         _hasVisitedStartThisPhase = false;
         PhaseChanged?.Invoke(phase);
-        Debug.Log($"[Session] {(phase == SessionPhase.Idle || phase == SessionPhase.Complete ? "" : $"Trial {TrialNumber}/{TotalTrials} -> ")}{phase}");
+        Debug.Log($"[Session] {(phase == SessionPhase.Idle || phase == SessionPhase.Complete || phase == SessionPhase.Consent ? "" : $"Trial {TrialNumber}/{TotalTrials} -> ")}{phase}");
     }
 
     // =====================================================================
@@ -864,6 +940,7 @@ private void Update()
                 case SessionPhase.RetraceReview: EndRetraceReview(); break;
                 case SessionPhase.TrialComplete: StartNextTrial(); break;
                 case SessionPhase.Questionnaire: QnNext(); break;
+                case SessionPhase.Consent: if (ConsentDeclined) ConsentBackToIdle(); else ConsentAgree(); break;
             }
         }
 

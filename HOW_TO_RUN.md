@@ -155,6 +155,7 @@ can copy/back up/delete one participant's data independently of everyone else's:
 <persistentDataPath>/StudyData/p01/value_questions.csv  one row per recall question
 <persistentDataPath>/StudyData/p01/retracing_log.csv    one row per retrace sample
 <persistentDataPath>/StudyData/p01/questionnaires.csv   one row per questionnaire item (M58)
+<persistentDataPath>/StudyData/p01/consent.csv          consent answer(s) + wording version (M59)
 <persistentDataPath>/StudyData/p02/trials.csv           (next participant, same 3 files)
 ...
 ```
@@ -170,8 +171,17 @@ presentation_order, dataset_id, ...` plus per-file specifics (phase durations an
 score in `trials.csv`; question text/correct answer/response/is_correct/answer_mode in
 `value_questions.csv`; timestamp + head_x/y/z in `retracing_log.csv`).
 
-**Post-condition questionnaire (M58):** after the last trial of each condition the panel
-asks 16 items, one per screen: SPES self-location (4) and possible actions (4), two
+**Consent (M59):** Start Session first shows the consent screen (text on
+`Assets/ScriptableObjects/ConsentForm.asset` -- replace the placeholder with the approved
+wording and bump `version`). "I agree" starts the first trial; "I do not agree" shows a
+short message and returns to the start screen. Both answers are logged in `consent.csv`.
+
+**Trials per condition (M59):** set `trialsPerCondition` on `RunSettings.asset`. Each
+condition's trials run back to back; recall questions follow every trial, and the
+questionnaire follows the condition's last trial. Give the dataset pool 5 x n datasets.
+
+**Post-condition questionnaire (M58/M59):** after the last trial of each condition an
+instruction screen (Start button) is shown, then 16 items, one per screen: SPES self-location (4) and possible actions (4), two
 cue-noticing checks (1-5 buttons), and the six NASA Raw TLX items (a 0-100 row of 21
 segments). The participant points and presses the trigger; Back revises earlier answers,
 Next stays disabled until the item is answered, and the answers are saved on Finish.

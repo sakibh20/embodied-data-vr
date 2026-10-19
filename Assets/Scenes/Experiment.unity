@@ -1006,8 +1006,8 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 527a0db3dcab1904088a58d6f7b894f8, type: 2}
   - {fileID: 11400000, guid: b63734f07a494384e92f7f7fcb1bdc2b, type: 2}
   participantId: 1
-  trialsPerCondition: 1
   retraceSampleInterval: 0.1
+  consentForm: {fileID: 11400000, guid: 951cf7064654bcd488610200a32c5b8c, type: 2}
   postConditionQuestionnaire: {fileID: 11400000, guid: edae05a83ef9b1e4b943e1c451057720, type: 2}
   alignAreaToParticipantOnStart: 1
   experimentArea: {fileID: 0}

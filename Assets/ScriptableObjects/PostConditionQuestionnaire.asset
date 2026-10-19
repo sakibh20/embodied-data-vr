@@ -12,9 +12,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8cb93ed616f8e214c8a87badb50a1df3, type: 3}
   m_Name: PostConditionQuestionnaire
   m_EditorClassIdentifier: Assembly-CSharp::QuestionnaireDefinition
-  title: About the walk you just did
-  intro: Please answer these questions about the walk you just completed. Point at
-    your answer and press the trigger.
+  title: About this part of the study
+  intro: You have finished this part of the study. Please answer the following questions
+    about the walks you just completed. Point at your answer and press the trigger.
   items:
   - id: SPES-SL1
     instrument: SPES

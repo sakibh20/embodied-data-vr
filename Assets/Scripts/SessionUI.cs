@@ -126,12 +126,11 @@ public class SessionUI : MonoBehaviour
         // panel out of the way for the rest of the review window so it doesn't occlude
         // that shape, the same way Retrace's own instruction hides itself. See
         // ROADMAP.md M44.
+        // M59 (supervisor): no instruction during the review any more -- the panel
+        // stays hidden and the traced shape is simply shown on the floor.
         if (phase == SessionPhase.RetraceReview)
         {
-            _view.gameObject.SetActive(true);
-            _view.Title.text = "Here's what you traced";
-            _view.Body.text = "Take a look at the shape you just walked -- Recall questions come next.";
-            Invoke(nameof(HidePanel), retraceReviewPanelSeconds);
+            _view.gameObject.SetActive(false);
             return;
         }
 
@@ -139,7 +138,8 @@ public class SessionUI : MonoBehaviour
         _view.gameObject.SetActive(showPanel);
         if (!showPanel) return;
 
-        string trialTag = (phase != SessionPhase.Idle && phase != SessionPhase.Complete)
+        string trialTag = (phase != SessionPhase.Idle && phase != SessionPhase.Complete &&
+                           phase != SessionPhase.Consent)
             ? $"Trial {session.TrialNumber}/{session.TotalTrials}   " : "";
 
         switch (phase)
@@ -183,6 +183,10 @@ public class SessionUI : MonoBehaviour
 
             case SessionPhase.Questionnaire:
                 RenderQuestionnaire();
+                break;
+
+            case SessionPhase.Consent:
+                RenderConsent();
                 break;
 
             case SessionPhase.TrialComplete:
@@ -255,19 +259,58 @@ public class SessionUI : MonoBehaviour
     // Post-condition questionnaire (M58): one item per screen, answered by pointing.
     // =====================================================================
 
+    // =====================================================================
+    // Consent (M59): shown once before the first trial.
+    // =====================================================================
+
+    private void RenderConsent()
+    {
+        var c = session.ConsentForm;
+        if (c == null) return;
+        _view.Title.text = c.title;
+
+        if (session.ConsentDeclined)
+        {
+            _view.Body.text = c.declinedMessage;
+            var back = AddRow(68, 40);
+            AddButtonTo(back, "Back to start screen", () => session.ConsentBackToIdle(), false, true);
+            return;
+        }
+
+        // First paragraph goes in the panel's Body text, the rest (the points) below it.
+        string body = c.body ?? "";
+        int split = body.IndexOf("\n\n", System.StringComparison.Ordinal);
+        _view.Body.text = split >= 0 ? body.Substring(0, split) : "";
+        string points = split >= 0 ? body.Substring(split + 2) : body;
+        AddTextRow(points, 30, TextAlignmentOptions.Left, 300);
+        AddTextRow($"<b>{c.question}</b>", 30, TextAlignmentOptions.Center, 50);
+        var row = AddRow(76, 40);
+        AddButtonTo(row, c.declineLabel, () => session.ConsentDecline(), false, true);
+        AddButtonTo(row, c.agreeLabel, () => session.ConsentAgree(), false, true);
+    }
+
     private static readonly Color SelectedColor = new Color(1f, 0.74f, 0.2f, 1f);
 
     private void RenderQuestionnaire()
     {
+        var def = session.Questionnaire;
+
+        // M59: the instruction gets its own screen, right after the recall questions;
+        // the items start when the participant presses Start.
+        if (session.QnShowingIntro)
+        {
+            _view.Title.text = def != null ? def.title : "Questionnaire";
+            _view.Body.text = def != null ? def.intro : "";
+            var startRow = AddRow(68, 40);
+            AddButtonTo(startRow, "Start", () => session.QnBeginItems(), false, true);
+            return;
+        }
+
         QuestionnaireItem item = session.CurrentQnItem;
         if (item == null) { _view.Body.text = ""; return; }
 
-        var def = session.Questionnaire;
         _view.Title.text = $"{(def != null ? def.title : "Questionnaire")}   ({session.QnNumber}/{session.QnCount})";
         _view.Body.text = item.text;
-
-        if (session.QnNumber == 1 && def != null && !string.IsNullOrEmpty(def.intro))
-            AddTextRow(def.intro, 24, TextAlignmentOptions.Center, 56);
 
         int current = session.CurrentQnResponse;
 
@@ -289,7 +332,7 @@ public class SessionUI : MonoBehaviour
                 int value = k * 5;
                 AddButtonTo(row, "", () => session.SetQnResponse(value), current == value, true);
             }
-            AddAnchorRow(item.lowAnchor, current >= 0 ? $"Selected: <b>{current}</b>" : "", item.highAnchor);
+            AddAnchorRow(item.lowAnchor, "", item.highAnchor);   // M59: no "Selected: x" readout
         }
 
         var nav = AddRow(68, 40);

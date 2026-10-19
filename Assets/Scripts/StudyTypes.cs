@@ -11,7 +11,7 @@ using UnityEngine;
 /// trial/question/sample while it's being built up.
 /// </summary>
 
-public enum SessionPhase { Idle, Walk, Distractor, Retrace, RetraceReview, Recall, TrialComplete, Complete, Questionnaire }
+public enum SessionPhase { Idle, Walk, Distractor, Retrace, RetraceReview, Recall, TrialComplete, Complete, Questionnaire, Consent }
 
 /// <summary>One planned walk: which condition, which dataset, and its ordering.</summary>
 [Serializable]
