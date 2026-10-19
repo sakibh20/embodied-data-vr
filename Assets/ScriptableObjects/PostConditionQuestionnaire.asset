@@ -1,0 +1,132 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8cb93ed616f8e214c8a87badb50a1df3, type: 3}
+  m_Name: PostConditionQuestionnaire
+  m_EditorClassIdentifier: Assembly-CSharp::QuestionnaireDefinition
+  title: About the walk you just did
+  intro: Please answer these questions about the walk you just completed. Point at
+    your answer and press the trigger.
+  items:
+  - id: SPES-SL1
+    instrument: SPES
+    subscale: self-location
+    text: I felt like I was actually there in the virtual environment.
+    scale: 0
+    lowAnchor: I do not agree at all
+    highAnchor: I fully agree
+  - id: SPES-SL2
+    instrument: SPES
+    subscale: self-location
+    text: It seemed as though I actually took part in the action of the virtual environment.
+    scale: 0
+    lowAnchor: I do not agree at all
+    highAnchor: I fully agree
+  - id: SPES-SL3
+    instrument: SPES
+    subscale: self-location
+    text: It was as though my true location had shifted into the virtual environment.
+    scale: 0
+    lowAnchor: I do not agree at all
+    highAnchor: I fully agree
+  - id: SPES-SL4
+    instrument: SPES
+    subscale: self-location
+    text: I felt as though I was physically present in the virtual environment.
+    scale: 0
+    lowAnchor: I do not agree at all
+    highAnchor: I fully agree
+  - id: SPES-PA1
+    instrument: SPES
+    subscale: possible actions
+    text: The dots in the virtual environment gave me the feeling that I could do
+      things with them.
+    scale: 0
+    lowAnchor: I do not agree at all
+    highAnchor: I fully agree
+  - id: SPES-PA2
+    instrument: SPES
+    subscale: possible actions
+    text: I had the impression that I could be active in the virtual environment.
+    scale: 0
+    lowAnchor: I do not agree at all
+    highAnchor: I fully agree
+  - id: SPES-PA5
+    instrument: SPES
+    subscale: possible actions
+    text: I felt like I could move around among the dots in the virtual environment.
+    scale: 0
+    lowAnchor: I do not agree at all
+    highAnchor: I fully agree
+  - id: SPES-PA8
+    instrument: SPES
+    subscale: possible actions
+    text: It seemed to me that I could do whatever I wanted in the virtual environment.
+    scale: 0
+    lowAnchor: I do not agree at all
+    highAnchor: I fully agree
+  - id: CUE-V
+    instrument: Cue check
+    subscale: visual cue
+    text: I noticed the surroundings changing as I walked.
+    scale: 0
+    lowAnchor: I do not agree at all
+    highAnchor: I fully agree
+  - id: CUE-A
+    instrument: Cue check
+    subscale: audio cue
+    text: I noticed the sound changing as I walked.
+    scale: 0
+    lowAnchor: I do not agree at all
+    highAnchor: I fully agree
+  - id: TLX-1
+    instrument: NASA Raw TLX
+    subscale: Mental Demand
+    text: How mentally demanding was the walk?
+    scale: 1
+    lowAnchor: Very low
+    highAnchor: Very high
+  - id: TLX-2
+    instrument: NASA Raw TLX
+    subscale: Physical Demand
+    text: How physically demanding was the walk?
+    scale: 1
+    lowAnchor: Very low
+    highAnchor: Very high
+  - id: TLX-3
+    instrument: NASA Raw TLX
+    subscale: Temporal Demand
+    text: How hurried or rushed was the pace of the walk?
+    scale: 1
+    lowAnchor: Very low
+    highAnchor: Very high
+  - id: TLX-4
+    instrument: NASA Raw TLX
+    subscale: Performance
+    text: How successful were you in accomplishing what you were asked to do?
+    scale: 1
+    lowAnchor: Perfect
+    highAnchor: Failure
+  - id: TLX-5
+    instrument: NASA Raw TLX
+    subscale: Effort
+    text: How hard did you have to work to accomplish your level of performance?
+    scale: 1
+    lowAnchor: Very low
+    highAnchor: Very high
+  - id: TLX-6
+    instrument: NASA Raw TLX
+    subscale: Frustration
+    text: How insecure, discouraged, irritated, stressed, and annoyed were you during
+      the walk?
+    scale: 1
+    lowAnchor: Very low
+    highAnchor: Very high

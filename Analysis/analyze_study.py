@@ -28,6 +28,9 @@ Inputs (found under <study_data_dir>/<participant>/, as written by SessionContro
                          recall_total.
     retracing_log.csv   one row per retrace sample (participant_id, presentation_order,
                          t_seconds, head_x, head_y, head_z, ...) -- many rows per trial.
+    questionnaires.csv  (M58) one row per post-condition questionnaire item (asked once
+                         after each condition): instrument, subscale, item_id, response
+                         (SPES / cue checks 1-5, NASA Raw TLX 0-100).
     value_questions.csv one row per recall question (not required for the metrics
                          below, since trials.csv already carries recall_score/total,
                          but available for per-question-type breakdowns).
@@ -54,6 +57,10 @@ overwrite the all-participants output):
                               derived retrace metrics (and recall_pct).
     analysis_conditions.csv  per-condition aggregate (means across all trials).
     analysis_participant_order.csv  which condition each participant got, in order.
+    analysis_questionnaires.csv  (M58) one row per participant x condition: SPES
+                              self-location mean, SPES possible-actions mean, SPES
+                              overall mean, the two cue-noticing checks, the six TLX
+                              items and the Raw TLX score (mean of the six).
     summary.csv              the same headline numbers printed to stdout, as a
                               one-column CSV of report lines, so the "result" of a
                               run is a plain-text-readable file and not just a
@@ -251,6 +258,47 @@ def save_retrace_plot(path, samples, values, corr, participant_id, order, condit
     return True
 
 
+def summarize_questionnaires(q_rows):
+    """One row per (participant, condition): SPES subscale means, cue checks, TLX items
+    and Raw TLX (unweighted mean of the six TLX items). Items are identified by the
+    item_id prefixes written by SessionController (SPES-SL*, SPES-PA*, CUE-V, CUE-A,
+    TLX-1..6), so adding/removing items on the Unity asset needs no change here."""
+    groups = {}
+    for q in q_rows:
+        key = (q.get("participant_id", ""), q.get("condition", ""))
+        try:
+            v = float(q.get("response", ""))
+        except ValueError:
+            continue
+        groups.setdefault(key, {})[q.get("item_id", "")] = (v, q)
+
+    def mean_of(items, prefix):
+        vals = [v for k, (v, _) in items.items() if k.startswith(prefix)]
+        return round(stats.mean(vals), 3) if vals else ""
+
+    out = []
+    for (pid, cond), items in sorted(groups.items()):
+        first = next(iter(items.values()))[1]
+        row = {
+            "participant_id": pid,
+            "condition": cond,
+            "audio_cue": first.get("audio_cue", ""),
+            "visual_cue": first.get("visual_cue", ""),
+            "presentation_order": first.get("presentation_order", ""),
+            "spes_sl_mean": mean_of(items, "SPES-SL"),
+            "spes_pa_mean": mean_of(items, "SPES-PA"),
+            "spes_mean": mean_of(items, "SPES-"),
+            "cue_visual": items["CUE-V"][0] if "CUE-V" in items else "",
+            "cue_audio": items["CUE-A"][0] if "CUE-A" in items else "",
+        }
+        for i in range(1, 7):
+            k = f"TLX-{i}"
+            row[k.lower().replace("-", "_")] = items[k][0] if k in items else ""
+        row["raw_tlx"] = mean_of(items, "TLX-")
+        out.append(row)
+    return out
+
+
 def to_int(row, key, default=0):
     try:
         return int(row.get(key, default) or default)
@@ -399,6 +447,19 @@ def run_analysis(study_data_dir, out_dir=None, datasets_path=None, make_plots=Tr
         w.writeheader()
         w.writerows(order_rows)
 
+    # ---- Post-condition questionnaire (M58) ----
+    q_rows = read_all_rows(study_data_dir, "questionnaires.csv")
+    if participant_id:
+        q_rows = [q for q in q_rows if q.get("participant_id") == participant_id]
+    qn_rows = summarize_questionnaires(q_rows)
+    qn_out = None
+    if qn_rows:
+        qn_out = os.path.join(out_dir, "analysis_questionnaires.csv")
+        with open(qn_out, "w", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=list(qn_rows[0].keys()))
+            w.writeheader()
+            w.writerows(qn_rows)
+
     n_part = len({t.get("participant_id") for t in trials})
 
     summary_lines = []
@@ -416,7 +477,21 @@ def run_analysis(study_data_dir, out_dir=None, datasets_path=None, make_plots=Tr
     for o in order_rows:
         summary_lines.append(f"  {o['participant_id']:6s} ({o['n_trials']} trial(s)): {o['condition_order']}")
 
-    wrote_lines = [trials_out, conds_out, order_out]
+    if qn_rows:
+        summary_lines.append("")
+        summary_lines.append("Post-condition questionnaire (mean per condition):")
+        by_cond = {}
+        for r in qn_rows:
+            by_cond.setdefault(r["condition"], []).append(r)
+        for cond, rs in sorted(by_cond.items()):
+            def m(key):
+                vals = [r[key] for r in rs if r[key] != ""]
+                return f"{stats.mean(vals):.2f}" if vals else "  - "
+            summary_lines.append(
+                f"  {cond:16s} n={len(rs):2d}  SPES-SL={m('spes_sl_mean')}  SPES-PA={m('spes_pa_mean')}  "
+                f"cueV={m('cue_visual')}  cueA={m('cue_audio')}  RawTLX={m('raw_tlx')}")
+
+    wrote_lines = [trials_out, conds_out, order_out] + ([qn_out] if qn_out else [])
     if do_plots:
         wrote_lines.append(f"{plots_dir}/  ({n_plots} retrace-vs-original PNG(s))")
     elif not datasets:

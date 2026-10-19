@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.UI;
 using UnityEngine.InputSystem.UI;
 using UnityEngine.XR.Interaction.Toolkit.UI;   // XRUIInputModule, TrackedDeviceGraphicRaycaster
 using System.Globalization;
@@ -180,6 +181,10 @@ public class SessionUI : MonoBehaviour
                 RenderRecall(trialTag);
                 break;
 
+            case SessionPhase.Questionnaire:
+                RenderQuestionnaire();
+                break;
+
             case SessionPhase.TrialComplete:
                 _view.Title.text = trialTag + "Trial complete";
                 if (session.ReadyToStartNext)
@@ -244,6 +249,120 @@ public class SessionUI : MonoBehaviour
                 AddOptionButton(q.options[i], () => session.AnswerCurrentQuestion(choice));
             }
         }
+    }
+
+    // =====================================================================
+    // Post-condition questionnaire (M58): one item per screen, answered by pointing.
+    // =====================================================================
+
+    private static readonly Color SelectedColor = new Color(1f, 0.74f, 0.2f, 1f);
+
+    private void RenderQuestionnaire()
+    {
+        QuestionnaireItem item = session.CurrentQnItem;
+        if (item == null) { _view.Body.text = ""; return; }
+
+        var def = session.Questionnaire;
+        _view.Title.text = $"{(def != null ? def.title : "Questionnaire")}   ({session.QnNumber}/{session.QnCount})";
+        _view.Body.text = item.text;
+
+        if (session.QnNumber == 1 && def != null && !string.IsNullOrEmpty(def.intro))
+            AddTextRow(def.intro, 24, TextAlignmentOptions.Center, 56);
+
+        int current = session.CurrentQnResponse;
+
+        if (item.scale == QuestionnaireScale.Agree5)
+        {
+            var row = AddRow(84, 16);
+            for (int v = 1; v <= 5; v++)
+            {
+                int value = v;
+                AddButtonTo(row, v.ToString(), () => session.SetQnResponse(value), current == value, true);
+            }
+            AddAnchorRow(item.lowAnchor, "", item.highAnchor);
+        }
+        else // Tlx21: 0..100 in steps of 5, like the 21 tick marks of the paper NASA-TLX
+        {
+            var row = AddRow(84, 4);
+            for (int k = 0; k <= 20; k++)
+            {
+                int value = k * 5;
+                AddButtonTo(row, "", () => session.SetQnResponse(value), current == value, true);
+            }
+            AddAnchorRow(item.lowAnchor, current >= 0 ? $"Selected: <b>{current}</b>" : "", item.highAnchor);
+        }
+
+        var nav = AddRow(68, 40);
+        AddButtonTo(nav, "Back", () => session.QnBack(), false, session.QnNumber > 1);
+        AddButtonTo(nav, session.QnNumber < session.QnCount ? "Next" : "Finish",
+                    () => session.QnNext(), false, current >= 0);
+    }
+
+    // A horizontal row inside the scrollable content column.
+    private RectTransform AddRow(float height, float spacing)
+    {
+        var go = new GameObject("Row", typeof(RectTransform));
+        var rt = (RectTransform)go.transform;
+        rt.SetParent(_view.Content, false);
+        var le = go.AddComponent<LayoutElement>();
+        le.minHeight = height; le.preferredHeight = height;
+        var h = go.AddComponent<HorizontalLayoutGroup>();
+        h.spacing = spacing;
+        h.childControlWidth = true; h.childControlHeight = true;
+        h.childForceExpandWidth = true; h.childForceExpandHeight = true;
+        _items.Add(go);
+        return rt;
+    }
+
+    private SessionOptionButton AddButtonTo(RectTransform parent, string label,
+                                            UnityEngine.Events.UnityAction onClick,
+                                            bool selected, bool interactable)
+    {
+        var b = Instantiate(optionButtonPrefab, parent);
+        var le = b.GetComponent<LayoutElement>() ?? b.gameObject.AddComponent<LayoutElement>();
+        le.flexibleWidth = 1f;
+        le.minWidth = 0f;
+        if (b.Label != null)
+        {
+            b.Label.text = selected && !string.IsNullOrEmpty(label) ? $"<b>{label}</b>" : label;
+            b.Label.enableAutoSizing = false;
+        }
+        if (b.Button != null)
+        {
+            b.Button.onClick.AddListener(onClick);
+            b.Button.interactable = interactable;
+            if (selected && b.Button.targetGraphic != null) b.Button.targetGraphic.color = SelectedColor;
+        }
+        return b;
+    }
+
+    private void AddAnchorRow(string left, string centre, string right)
+    {
+        var row = AddRow(40, 10);
+        AddText(row, left, 24, TextAlignmentOptions.Left);
+        AddText(row, centre, 24, TextAlignmentOptions.Center);
+        AddText(row, right, 24, TextAlignmentOptions.Right);
+    }
+
+    private void AddTextRow(string text, float size, TextAlignmentOptions align, float height)
+    {
+        var row = AddRow(height, 0);
+        AddText(row, text, size, align);
+    }
+
+    private void AddText(RectTransform parent, string text, float size, TextAlignmentOptions align)
+    {
+        var go = new GameObject("Text", typeof(RectTransform));
+        go.transform.SetParent(parent, false);
+        var t = go.AddComponent<TextMeshProUGUI>();
+        if (_view.Body != null) { t.font = _view.Body.font; t.color = _view.Body.color; }
+        t.fontSize = size;
+        t.alignment = align;
+        t.textWrappingMode = TextWrappingModes.Normal;
+        t.text = text ?? "";
+        t.raycastTarget = false;
+        var le = go.AddComponent<LayoutElement>();
+        le.flexibleWidth = 1f;
     }
 
     // =====================================================================
@@ -410,6 +529,30 @@ public class SessionUI : MonoBehaviour
 
         if (item.Submit != null) item.Submit.onClick.AddListener(Submit);
         if (item.Input != null) item.Input.onSubmit.AddListener(_ => Submit());
+
+        // M58: on-screen number pad -- participants in the headset have no keyboard.
+        // (A physical keyboard still works for the researcher on desktop.)
+        void Press(string key)
+        {
+            if (item.Input == null) return;
+            string t = item.Input.text ?? "";
+            if (key == "Delete") { if (t.Length > 0) t = t.Substring(0, t.Length - 1); }
+            else if (key == ".") { if (!t.Contains(".")) t = (t.Length == 0 ? "0" : t) + "."; }
+            else if (t.Length < 8) t += key;
+            item.Input.text = t;
+            if (_view != null) _view.Body.text = basePrompt;   // clear any "enter a number" hint
+        }
+
+        foreach (var keys in new[] { new[] { "7", "8", "9" }, new[] { "4", "5", "6" },
+                                     new[] { "1", "2", "3" }, new[] { ".", "0", "Delete" } })
+        {
+            var row = AddRow(68, 14);
+            foreach (var k in keys)
+            {
+                string key = k;
+                AddButtonTo(row, key, () => Press(key), false, true);
+            }
+        }
     }
 
     private void ClearItems()

@@ -1008,6 +1008,7 @@ MonoBehaviour:
   participantId: 1
   trialsPerCondition: 1
   retraceSampleInterval: 0.1
+  postConditionQuestionnaire: {fileID: 11400000, guid: edae05a83ef9b1e4b943e1c451057720, type: 2}
   alignAreaToParticipantOnStart: 1
   experimentArea: {fileID: 0}
   retraceReviewSeconds: 5

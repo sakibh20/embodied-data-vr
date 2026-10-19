@@ -48,6 +48,11 @@ public class SessionController : MonoBehaviour
     [Header("Retrace capture")]
     [SerializeField] private float retraceSampleInterval = 0.1f;
 
+    [Header("Post-condition questionnaire (M58)")]
+    [Tooltip("Asked once after each condition's LAST trial (not after every trial). " +
+             "Leave empty to skip. Items are edited on the asset.")]
+    [SerializeField] private QuestionnaireDefinition postConditionQuestionnaire;
+
     [Header("Participant reference (M51)")]
     [Tooltip("On Start Session, re-anchor the ExperimentArea (graph, grid, markers, cue " +
              "field) to wherever the participant is standing and facing, so the walk " +
@@ -158,6 +163,59 @@ private void Awake()
         (_phase == SessionPhase.Recall && _result != null && _questionIndex < _result.questions.Count)
             ? _result.questions[_questionIndex] : null;
     public int QuestionNumber => _questionIndex + 1;
+
+    // ---- Post-condition questionnaire (M58) ----
+    private int _qnIndex;
+    private int[] _qnResponses;   // -1 = not answered yet
+
+    public QuestionnaireDefinition Questionnaire => postConditionQuestionnaire;
+    public QuestionnaireItem CurrentQnItem =>
+        (_phase == SessionPhase.Questionnaire && postConditionQuestionnaire != null &&
+         _qnIndex >= 0 && _qnIndex < postConditionQuestionnaire.Count)
+            ? postConditionQuestionnaire.items[_qnIndex] : null;
+    public int QnNumber => _qnIndex + 1;
+    public int QnCount => postConditionQuestionnaire != null ? postConditionQuestionnaire.Count : 0;
+    public int CurrentQnResponse => (_qnResponses != null && _qnIndex < _qnResponses.Length) ? _qnResponses[_qnIndex] : -1;
+    public string ConditionDisplayName => _result != null ? _result.condition : "";
+
+    /// <summary>Record the answer for the current item (1..5 or 0..100); the participant
+    /// can still change it until they press Next.</summary>
+    public void SetQnResponse(int value)
+    {
+        if (_phase != SessionPhase.Questionnaire || _qnResponses == null) return;
+        _qnResponses[_qnIndex] = value;
+        PhaseChanged?.Invoke(_phase);
+    }
+
+    /// <summary>Next item (only once answered); after the last one, writes all answers to
+    /// questionnaires.csv and continues to TrialComplete.</summary>
+    public void QnNext()
+    {
+        if (_phase != SessionPhase.Questionnaire || CurrentQnResponse < 0) return;
+        if (_qnIndex < QnCount - 1) { _qnIndex++; PhaseChanged?.Invoke(_phase); return; }
+
+        WriteQuestionnaireCsv();
+        ReadyToStartNext = false;
+        SetPhase(SessionPhase.TrialComplete);
+    }
+
+    public void QnBack()
+    {
+        if (_phase != SessionPhase.Questionnaire || _qnIndex <= 0) return;
+        _qnIndex--;
+        PhaseChanged?.Invoke(_phase);
+    }
+
+    // True when no later trial in the session uses this trial's condition, i.e. this
+    // is the end of the condition (works for trialsPerCondition 1 or 2).
+    private bool IsLastTrialOfCondition(int index)
+    {
+        if (index < 0 || index >= _trials.Count) return false;
+        var c = _trials[index].condition;
+        for (int i = index + 1; i < _trials.Count; i++)
+            if (_trials[i].condition == c) return false;
+        return true;
+    }
     public int QuestionCount => _result?.questions.Count ?? 0;
 
     /// <summary>
@@ -556,6 +614,18 @@ private void Awake()
             // put them in the middle of a new graph forming around them, with no
             // chance to see it "spawn". Require they walk back near the start first,
             // then press a button -- see StartNextTrial / Update. See ROADMAP.md M39.
+            // M58: at the end of a condition (its last trial), the post-condition
+            // questionnaire comes first; TrialComplete follows it (see QnNext).
+            if (postConditionQuestionnaire != null && postConditionQuestionnaire.Count > 0 &&
+                IsLastTrialOfCondition(_index))
+            {
+                _qnIndex = 0;
+                _qnResponses = new int[postConditionQuestionnaire.Count];
+                for (int i = 0; i < _qnResponses.Length; i++) _qnResponses[i] = -1;
+                SetPhase(SessionPhase.Questionnaire);
+                return;
+            }
+
             ReadyToStartNext = false;
             SetPhase(SessionPhase.TrialComplete);
         }
@@ -793,7 +863,23 @@ private void Update()
                 case SessionPhase.Retrace: EndRetrace(); break;
                 case SessionPhase.RetraceReview: EndRetraceReview(); break;
                 case SessionPhase.TrialComplete: StartNextTrial(); break;
+                case SessionPhase.Questionnaire: QnNext(); break;
             }
+        }
+
+        // Questionnaire (debug): 1-5 answers an agreement item; Backspace goes back.
+        if (_phase == SessionPhase.Questionnaire)
+        {
+            var item = CurrentQnItem;
+            if (item != null && item.scale == QuestionnaireScale.Agree5)
+            {
+                if (kb.digit1Key.wasPressedThisFrame) SetQnResponse(1);
+                else if (kb.digit2Key.wasPressedThisFrame) SetQnResponse(2);
+                else if (kb.digit3Key.wasPressedThisFrame) SetQnResponse(3);
+                else if (kb.digit4Key.wasPressedThisFrame) SetQnResponse(4);
+                else if (kb.digit5Key.wasPressedThisFrame) SetQnResponse(5);
+            }
+            if (kb.backspaceKey.wasPressedThisFrame) QnBack();
         }
 
         // Only treat 1-4 as MCQ shortcuts when the recall UI is actually in
@@ -862,6 +948,32 @@ private void Update()
             response.HasValue ? response.Value.ToString("0.###", CultureInfo.InvariantCulture) : "",
             q.IsCorrect.ToString(), q.AnswerMode, DateTime.UtcNow.ToString("o")
         });
+    }
+
+    private static readonly string[] QuestionnaireHeader =
+        { "participant_id", "condition", "audio_cue", "visual_cue", "presentation_order", "dataset_id",
+          "instrument", "subscale", "item_id", "item_text", "scale", "response", "timestamp" };
+
+    // One row per item, written when the questionnaire is finished (so answers changed
+    // via Back are logged with their final value). presentation_order/dataset_id are
+    // those of the condition's last trial. (M58)
+    private void WriteQuestionnaireCsv()
+    {
+        if (postConditionQuestionnaire == null || _qnResponses == null || _result == null) return;
+        var (audio, visual) = CueLabels(_result.condition);
+        string order = (_result.orderIndex + 1).ToString();
+        string now = DateTime.UtcNow.ToString("o");
+        for (int i = 0; i < postConditionQuestionnaire.Count; i++)
+        {
+            var it = postConditionQuestionnaire.items[i];
+            AppendCsvRow(ParticipantLabel, "questionnaires.csv", QuestionnaireHeader, new[]
+            {
+                ParticipantLabel, _result.condition, audio, visual, order, _result.datasetName,
+                it.instrument, it.subscale, it.id, it.text,
+                it.scale == QuestionnaireScale.Tlx21 ? "0-100" : "1-5",
+                _qnResponses[i].ToString(), now
+            });
+        }
     }
 
     private void WriteRetraceCsv(TrialResult r)

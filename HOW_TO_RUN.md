@@ -154,6 +154,7 @@ can copy/back up/delete one participant's data independently of everyone else's:
 <persistentDataPath>/StudyData/p01/trials.csv           one row per trial
 <persistentDataPath>/StudyData/p01/value_questions.csv  one row per recall question
 <persistentDataPath>/StudyData/p01/retracing_log.csv    one row per retrace sample
+<persistentDataPath>/StudyData/p01/questionnaires.csv   one row per questionnaire item (M58)
 <persistentDataPath>/StudyData/p02/trials.csv           (next participant, same 3 files)
 ...
 ```
@@ -168,6 +169,15 @@ Columns follow the schema in the sources-folder data notes doc
 presentation_order, dataset_id, ...` plus per-file specifics (phase durations and recall
 score in `trials.csv`; question text/correct answer/response/is_correct/answer_mode in
 `value_questions.csv`; timestamp + head_x/y/z in `retracing_log.csv`).
+
+**Post-condition questionnaire (M58):** after the last trial of each condition the panel
+asks 16 items, one per screen: SPES self-location (4) and possible actions (4), two
+cue-noticing checks (1-5 buttons), and the six NASA Raw TLX items (a 0-100 row of 21
+segments). The participant points and presses the trigger; Back revises earlier answers,
+Next stays disabled until the item is answered, and the answers are saved on Finish.
+Items and wording live on the `PostConditionQuestionnaire` asset assigned to
+SessionController; leave that field empty to skip the questionnaire. Recall answers are
+typed on the panel's own number pad, so no keyboard is needed in the headset.
 
 Point the analysis script (§6) at the **`StudyData`** folder itself (not a single
 participant's subfolder) — it walks every participant subfolder automatically and
