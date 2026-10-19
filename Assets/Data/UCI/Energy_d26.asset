@@ -1,0 +1,48 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1f83b982a27c12c4784893e7c75ae031, type: 3}
+  m_Name: Energy_d26
+  m_EditorClassIdentifier: Assembly-CSharp::GraphData
+  values:
+  - 28.4
+  - 32.4
+  - 44
+  - 32.8
+  - 28.2
+  - 38.9
+  - 26.4
+  - 22
+  - 13.2
+  - 13.8
+  - 12.3
+  - 31.3
+  - 21.9
+  - 37.3
+  - 45.6
+  - 29.7
+  - 19.5
+  - 19.3
+  - 33.8
+  - 27.2
+  - 41.2
+  - 24.6
+  - 30.8
+  - 30.7
+  - 24
+  - 29.7
+  - 28.3
+  - 39.3
+  - 28.1
+  - 30.6
+  unit: kWh
+  prefix: Day
+  dataInterval: 1

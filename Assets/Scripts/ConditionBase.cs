@@ -12,7 +12,8 @@ public enum ConditionId
     Abstract,         // 2. generic audio + generic visual (beep + sphere)
     Representative,   // 3. representative audio + representative visual (electric hum + spark)
     SemanticAudio,    // 4. representative audio, generic visual (electric hum + sphere)
-    SemanticVisual    // 5. representative visual, generic audio (spark + beep)
+    SemanticVisual,   // 5. representative visual, generic audio (spark + beep)
+    Tutorial          // practice only (M60): blue spheres + the earlier electric sound; never in the experiment order
 }
 
 /// <summary>

@@ -17,6 +17,32 @@ MonoBehaviour:
   recallInputMode: 1
   conditionOrderMode: 3
   trialsPerCondition: 1
+  tutorialTrials:
+  - condition: 0
+    dataset: {fileID: 11400000, guid: bf6365b080ec16a40bd4cad91dd04be1, type: 2}
+  - condition: 5
+    dataset: {fileID: 11400000, guid: 32d32a96c12b65940b83575968bfc454, type: 2}
+  instructionsTitle: Welcome
+  instructionsText: 'In this study you will walk along line graphs laid out on the
+    floor. Each graph shows a household''s daily energy use over one month.
+
+
+    In
+    each round you will: walk the graph from the green Start marker to the End marker
+    and look at the values; do a short counting task; walk the shape again from memory
+    with the graph hidden; then answer a few questions about the values.
+
+
+    In
+    some rounds sounds and objects around you change with the values. After each
+    part of the study you will answer a short questionnaire.
+
+
+    We start with
+    a short tutorial so you can practise. The tutorial is not scored.'
+  tutorialCompleteTitle: Tutorial complete
+  tutorialCompleteText: You have now completed the tutorial. The experiment starts
+    next.
   semanticVisualVariant: 2
   sparkStarPrefab: {fileID: 1129292939552472230, guid: 4ed4d5fa5afd23249854c00464931d6d, type: 3}
   sparkOrbPrefab: {fileID: 6674757808408895671, guid: 26e57f1bf1269384495784994e46625d, type: 3}

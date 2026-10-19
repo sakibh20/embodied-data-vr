@@ -11,7 +11,7 @@ using UnityEngine;
 /// trial/question/sample while it's being built up.
 /// </summary>
 
-public enum SessionPhase { Idle, Walk, Distractor, Retrace, RetraceReview, Recall, TrialComplete, Complete, Questionnaire, Consent }
+public enum SessionPhase { Idle, Walk, Distractor, Retrace, RetraceReview, Recall, TrialComplete, Complete, Questionnaire, Consent, Instructions }
 
 /// <summary>One planned walk: which condition, which dataset, and its ordering.</summary>
 [Serializable]
@@ -21,6 +21,15 @@ public class TrialSpec
     public GraphData dataset;      // not written directly; name is logged
     public int orderIndex;         // 0-based position within the session
     public int trialInCondition;   // 0-based repeat index for this condition
+    public bool isPractice;        // tutorial trial (M60): logged to practice_*.csv, no questionnaire
+}
+
+/// <summary>One tutorial (practice) trial: which cue set and which dataset. Same for every participant.</summary>
+[Serializable]
+public class TutorialTrial
+{
+    public ConditionId condition = ConditionId.Control;
+    public GraphData dataset;
 }
 
 /// <summary>
@@ -102,6 +111,7 @@ public class TrialResult
     public string condition;
     public string datasetName;
     public int trialInCondition;
+    public bool isPractice;
 
     public string startedUtc;
     public string finishedUtc;

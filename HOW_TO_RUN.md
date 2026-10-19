@@ -176,6 +176,11 @@ score in `trials.csv`; question text/correct answer/response/is_correct/answer_m
 wording and bump `version`). "I agree" starts the first trial; "I do not agree" shows a
 short message and returns to the start screen. Both answers are logged in `consent.csv`.
 
+**Tutorial (M60):** after consent, an instructions screen, then the practice trials listed in
+`RunSettings.tutorialTrials` (now: plain on Energy_d43, then blue spheres + electric sound on
+Energy_d37 -- the same for everyone), then a "Tutorial complete" screen before trial 1. Practice
+data is saved as `practice_*.csv`. Edit the screen texts on RunSettings; empty the list to skip.
+
 **Trials per condition (M59):** set `trialsPerCondition` on `RunSettings.asset`. Each
 condition's trials run back to back; recall questions follow every trial, and the
 questionnaire follows the condition's last trial. Give the dataset pool 5 x n datasets.

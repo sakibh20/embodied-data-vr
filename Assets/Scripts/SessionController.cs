@@ -374,7 +374,31 @@ private void Awake()
 
         BuildTrials();
         _index = -1;
-        Debug.Log($"[Session] Participant {participantId}: {_trials.Count} trials.");
+        TutorialJustCompleted = false;
+        Debug.Log($"[Session] Participant {participantId}: {PracticeCount} practice + " +
+                  $"{_trials.Count - PracticeCount} trials.");
+
+        // M60: with a tutorial, the instructions screen comes first.
+        if (PracticeCount > 0) { SetPhase(SessionPhase.Instructions); return; }
+        NextTrial();
+    }
+
+    // ---- Tutorial (M60) ----
+    /// <summary>Number of practice (tutorial) trials at the start of the trial list.</summary>
+    public int PracticeCount { get; private set; }
+    public bool IsPracticeTrial => _index >= 0 && _index < _trials.Count && _trials[_index].isPractice;
+    /// <summary>True in the TrialComplete phase right after the last tutorial trial.</summary>
+    public bool TutorialJustCompleted { get; private set; }
+
+    /// <summary>"Practice 1/2" or "Trial 3/10" (experiment trials numbered without the tutorial).</summary>
+    public string TrialTag => IsPracticeTrial
+        ? $"Practice {TrialNumber}/{PracticeCount}"
+        : $"Trial {TrialNumber - PracticeCount}/{_trials.Count - PracticeCount}";
+
+    /// <summary>Instructions screen -> first tutorial trial.</summary>
+    public void BeginTutorial()
+    {
+        if (_phase != SessionPhase.Instructions) return;
         NextTrial();
     }
 
@@ -417,6 +441,20 @@ private void Awake()
     private void BuildTrials()
     {
         _trials.Clear();
+        PracticeCount = 0;
+        var tut = StudyConfig.Settings != null ? StudyConfig.Settings.tutorialTrials : null;
+        if (tut != null)
+            foreach (var t in tut)
+            {
+                if (t == null || t.dataset == null) continue;
+                _trials.Add(new TrialSpec
+                {
+                    condition = t.condition, dataset = t.dataset,
+                    orderIndex = PracticeCount, trialInCondition = 0, isPractice = true
+                });
+                PracticeCount++;
+            }
+
         int n = AllConditions.Length;
         int startDs = datasetPool.Count > 0 ? (participantId - 1) % datasetPool.Count : 0;
         int order = 0;
@@ -446,8 +484,8 @@ private void Awake()
             }
         }
 
-        if (datasetPool.Count < _trials.Count)
-            Debug.LogWarning($"[Session] Only {datasetPool.Count} datasets for {_trials.Count} " +
+        if (datasetPool.Count < _trials.Count - PracticeCount)
+            Debug.LogWarning($"[Session] Only {datasetPool.Count} datasets for {_trials.Count - PracticeCount} " +
                              "trials -- some will repeat within the session. Add more datasets.");
     }
 
@@ -547,12 +585,14 @@ private void Awake()
         }
 
         TrialSpec spec = _trials[_index];
+        TutorialJustCompleted = false;
         _result = new TrialResult
         {
             orderIndex = spec.orderIndex,
             condition = spec.condition.ToString(),
             datasetName = spec.dataset != null ? spec.dataset.name : "(none)",
             trialInCondition = spec.trialInCondition,
+            isPractice = spec.isPractice,
             startedUtc = DateTime.UtcNow.ToString("o"),
             distractorStartNumber = UnityEngine.Random.Range(300, 999),
             questions = BuildQuestions(spec.dataset, spec.orderIndex)
@@ -691,6 +731,16 @@ private void Awake()
             // then press a button -- see StartNextTrial / Update. See ROADMAP.md M39.
             // M58: at the end of a condition (its last trial), the post-condition
             // questionnaire comes first; TrialComplete follows it (see QnNext).
+            // M60: practice trials never get the questionnaire; after the last one the
+            // TrialComplete screen says the tutorial is complete.
+            if (_trials[_index].isPractice)
+            {
+                TutorialJustCompleted = _index + 1 >= _trials.Count || !_trials[_index + 1].isPractice;
+                ReadyToStartNext = false;
+                SetPhase(SessionPhase.TrialComplete);
+                return;
+            }
+
             if (postConditionQuestionnaire != null && postConditionQuestionnaire.Count > 0 &&
                 IsLastTrialOfCondition(_index))
             {
@@ -732,7 +782,7 @@ private void Awake()
         SetFeedbackArmed(false);
         _hasVisitedStartThisPhase = false;
         PhaseChanged?.Invoke(phase);
-        Debug.Log($"[Session] {(phase == SessionPhase.Idle || phase == SessionPhase.Complete || phase == SessionPhase.Consent ? "" : $"Trial {TrialNumber}/{TotalTrials} -> ")}{phase}");
+        Debug.Log($"[Session] {(phase == SessionPhase.Idle || phase == SessionPhase.Complete || phase == SessionPhase.Consent || phase == SessionPhase.Instructions ? "" : $"{TrialTag} -> ")}{phase}");
     }
 
     // =====================================================================
@@ -940,6 +990,7 @@ private void Update()
                 case SessionPhase.RetraceReview: EndRetraceReview(); break;
                 case SessionPhase.TrialComplete: StartNextTrial(); break;
                 case SessionPhase.Questionnaire: QnNext(); break;
+                case SessionPhase.Instructions: BeginTutorial(); break;
                 case SessionPhase.Consent: if (ConsentDeclined) ConsentBackToIdle(); else ConsentAgree(); break;
             }
         }
@@ -1001,7 +1052,7 @@ private void Update()
     private void WriteTrialCsv(TrialResult r)
     {
         var (audio, visual) = CueLabels(r.condition);
-        AppendCsvRow(ParticipantLabel, "trials.csv", TrialsHeader, new[]
+        AppendCsvRow(ParticipantLabel, DataFile("trials.csv", r.isPractice), TrialsHeader, new[]
         {
             ParticipantLabel, r.condition, audio, visual, (r.orderIndex + 1).ToString(),
             r.trialInCondition.ToString(), r.datasetName, r.startedUtc, r.finishedUtc,
@@ -1017,7 +1068,7 @@ private void Update()
     {
         var (audio, visual) = CueLabels(_result.condition);
         float? response = q.ResponseValue;
-        AppendCsvRow(ParticipantLabel, "value_questions.csv", QuestionsHeader, new[]
+        AppendCsvRow(ParticipantLabel, DataFile("value_questions.csv", _result.isPractice), QuestionsHeader, new[]
         {
             ParticipantLabel, _result.condition, audio, visual, (_result.orderIndex + 1).ToString(),
             _result.datasetName, "q" + (_result.questions.IndexOf(q) + 1), q.questionType, q.prompt,
@@ -1071,7 +1122,7 @@ private void Update()
             Vector3 p = new Vector3(s.x, s.y, s.z);
             if (experimentArea != null) p = experimentArea.WorldToArea(p);
 
-            AppendCsvRow(ParticipantLabel, "retracing_log.csv", RetraceHeader, new[]
+            AppendCsvRow(ParticipantLabel, DataFile("retracing_log.csv", r.isPractice), RetraceHeader, new[]
             {
                 ParticipantLabel, r.condition, audio, visual, order, r.datasetName,
                 s.timestampUtc, s.t.ToString("0.###", CultureInfo.InvariantCulture),
@@ -1096,9 +1147,13 @@ private void Update()
             case "Representative": return ("semantic", "semantic");
             case "SemanticAudio": return ("semantic", "plain");
             case "SemanticVisual": return ("plain", "semantic");
+            case "Tutorial": return ("tutorial", "tutorial");
             default: return ("unknown", "unknown");
         }
     }
+
+    // M60: tutorial trials go to practice_*.csv so the analysis never sees them.
+    private static string DataFile(string name, bool practice) => practice ? "practice_" + name : name;
 
     private static void AppendCsvRow(string participantLabel, string fileName, string[] header, string[] row)
     {

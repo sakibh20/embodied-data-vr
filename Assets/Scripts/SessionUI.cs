@@ -139,8 +139,8 @@ public class SessionUI : MonoBehaviour
         if (!showPanel) return;
 
         string trialTag = (phase != SessionPhase.Idle && phase != SessionPhase.Complete &&
-                           phase != SessionPhase.Consent)
-            ? $"Trial {session.TrialNumber}/{session.TotalTrials}   " : "";
+                           phase != SessionPhase.Consent && phase != SessionPhase.Instructions)
+            ? session.TrialTag + "   " : "";
 
         switch (phase)
         {
@@ -189,8 +189,37 @@ public class SessionUI : MonoBehaviour
                 RenderConsent();
                 break;
 
+            case SessionPhase.Instructions:
+            {
+                var rs = StudyConfig.Settings;
+                _view.Title.text = rs != null ? rs.instructionsTitle : "Instructions";
+                // First paragraph in the panel's Body, the rest below it (as on the consent screen).
+                string txt = rs != null ? rs.instructionsText ?? "" : "";
+                int cut = txt.IndexOf("\n\n", System.StringComparison.Ordinal);
+                _view.Body.text = cut >= 0 ? txt.Substring(0, cut) : "";
+                AddTextRow(cut >= 0 ? txt.Substring(cut + 2) : txt, 28, TextAlignmentOptions.Left, 300);
+                var row = AddRow(68, 40);
+                AddButtonTo(row, "Start the tutorial", () => session.BeginTutorial(), false, true);
+                break;
+            }
+
             case SessionPhase.TrialComplete:
-                _view.Title.text = trialTag + "Trial complete";
+                if (session.TutorialJustCompleted)
+                {
+                    // M60: end of the tutorial.
+                    var rs = StudyConfig.Settings;
+                    _view.Title.text = rs != null ? rs.tutorialCompleteTitle : "Tutorial complete";
+                    string done = rs != null ? rs.tutorialCompleteText : "You have now completed the tutorial.";
+                    if (session.ReadyToStartNext)
+                    {
+                        _view.Body.text = done + "\n\nPress Start the experiment when you're ready.";
+                        AddOptionButton("Start the experiment", () => session.StartNextTrial());
+                    }
+                    else
+                        _view.Body.text = done + "\n\nWalk back to the <b>Start</b> marker to continue.";
+                    break;
+                }
+                _view.Title.text = trialTag + (session.IsPracticeTrial ? "Practice complete" : "Trial complete");
                 if (session.ReadyToStartNext)
                 {
                     _view.Body.text = "Nice work! Press Start Next Trial when you're ready to continue.";

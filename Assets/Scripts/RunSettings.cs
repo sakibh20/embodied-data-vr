@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>Which rig drives the walk for a session.</summary>
@@ -81,6 +82,26 @@ public class RunSettings : ScriptableObject
              "Each trial uses the next dataset in the pool, so the pool needs " +
              "5 x n datasets to avoid repeats.")]
     [Range(1, 10)] public int trialsPerCondition = 1;
+
+    [Header("Tutorial (M60)")]
+    [Tooltip("Practice trials before the experiment, the same for every participant: an " +
+             "instructions screen, these trials in this order (full trial flow, logged to " +
+             "practice_*.csv, no questionnaire), then a 'tutorial complete' screen. Empty = no tutorial.")]
+    public List<TutorialTrial> tutorialTrials = new List<TutorialTrial>();
+    public string instructionsTitle = "Welcome";
+    [TextArea(6, 16)]
+    public string instructionsText =
+        "In this study you will walk along line graphs laid out on the floor. Each graph shows " +
+        "a household's daily energy use over one month.\n\n" +
+        "In each round you will: walk the graph from the green Start marker to the End marker and " +
+        "look at the values; do a short counting task; walk the shape again from memory with the " +
+        "graph hidden; then answer a few questions about the values.\n\n" +
+        "In some rounds sounds and objects around you change with the values. After each part of " +
+        "the study you will answer a short questionnaire.\n\n" +
+        "We start with a short tutorial so you can practise. The tutorial is not scored.";
+    public string tutorialCompleteTitle = "Tutorial complete";
+    [TextArea(2, 6)]
+    public string tutorialCompleteText = "You have now completed the tutorial. The experiment starts next.";
 
     [Header("Semantic visual (M55)")]
     [Tooltip("Which spark look the semantic-visual conditions use. A = pointy star, " +
