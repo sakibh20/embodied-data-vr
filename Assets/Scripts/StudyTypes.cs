@@ -101,6 +101,10 @@ public struct RetraceSample
     public float x;             // world X
     public float y;             // world Y (head height)
     public float z;             // world Z
+    public float yaw;           // M62: head yaw (deg, world)
+    public float pitch;         // M62: head pitch (deg, + = looking down)
+    public bool cuesOn;         // M62: cues driven at this moment (in region, phase armed)
+    public float cueValue;      // M62: 0..1 value driving the cues
 }
 
 /// <summary>Everything recorded for one completed trial.</summary>
@@ -122,6 +126,8 @@ public class TrialResult
     public float retraceSeconds;
 
     public List<RetraceSample> retracePath = new List<RetraceSample>();
+    public List<RetraceSample> walkPath = new List<RetraceSample>();   // M62: Walk phase, from the Start marker on
+    public List<Vector3> graphPoints = new List<Vector3>();           // M62: dot world positions (ground truth)
     public List<RecallQuestion> questions = new List<RecallQuestion>();
 
     public int RecallScore

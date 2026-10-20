@@ -46,6 +46,12 @@ public class WalkValueDriver : MonoBehaviour
     [SerializeField] private float debugRawValue;          // same, in dataset units
     [SerializeField] private bool debugInRegion;
 
+    /// <summary>M62: true while cues are being driven (phase active and the participant
+    /// inside the graph region). Logged with every movement sample.</summary>
+    public bool CuesOn => active && debugInRegion;
+    /// <summary>M62: the 0..1 value currently driving the cues (last value inside the region).</summary>
+    public float CueValue => debugNormalizedValue;
+
     public FeedbackSource Source
     {
         get => feedbackSource;
@@ -98,7 +104,7 @@ private void Awake()
 private void Update()
     {
         Transform head = PlayerRig.Head != null ? PlayerRig.Head : ResolvePlayerHead();
-        if (!active || head == null || path == null || !path.IsReady) return;
+        if (!active || head == null || path == null || !path.IsReady) { debugInRegion = false; return; }
 
         // Cues run only while the participant is on the walk; outside the graph
         // region they are gated off (silent, no density) rather than clamped.

@@ -49,3 +49,16 @@ sysinfo.txt
 
 #Claude
 .claude/settings.local.json
+# Per-user Unity editor state (window layouts, search index) -- changes every session
+[Uu]ser[Ss]ettings/
+# Editor screenshots taken while testing
+Assets/Screenshots/
+Assets/Screenshots.meta
+# Unity profiler / recorder output
+[Mm]emory[Cc]aptures/
+[Rr]ecordings/
+# Python caches from the analysis scripts
+__pycache__/
+*.pyc
+# Analysis output written next to the data
+Analysis/output/

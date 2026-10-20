@@ -148,6 +148,8 @@ public class SessionUI : MonoBehaviour
                 _view.Title.text = "Data Physicalisation Study";
                 {
                     string body = $"Participant: <b>{session.ParticipantLabel}</b> (auto-suggested from existing data -- adjust below if this is wrong)\n\n";
+                    if (session.ParticipantHasData())
+                        body = $"<color=#FF6B6B><b>{session.ParticipantLabel} already has recorded data.</b> Pick another id unless you are deliberately continuing this participant.</color>\n\n" + body;
                     if (audioMode != null)
                         body += $"Audio cue mode: <b>{ModeLabel(audioMode.Mode)}</b>\nChoose a mode, then start.";
                     else

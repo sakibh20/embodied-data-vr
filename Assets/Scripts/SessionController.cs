@@ -335,6 +335,7 @@ private void Awake()
     {
         // Only from Idle: calling it again while the consent screen is up must never skip consent.
         if (_phase != SessionPhase.Idle) return;
+        NewSessionId();
 
         // M59: the consent screen comes first. The area is aligned now, while the
         // participant still stands where the researcher placed them.
@@ -347,6 +348,23 @@ private void Awake()
             return;
         }
         BeginTrials(alignArea: consentForm == null);
+    }
+
+    // ---- Session identity (M62) ----
+    /// <summary>Unique per run of Start Session (participant + local start time). Written on
+    /// every CSV row, so two runs logged under the same participant id never mix.</summary>
+    public string SessionId { get; private set; } = "";
+
+    private void NewSessionId()
+    {
+        SessionId = $"{ParticipantLabel}_{DateTime.Now:yyyyMMdd-HHmmss}";
+    }
+
+    /// <summary>True if this participant id already has recorded data (shown as a warning on Idle).</summary>
+    public bool ParticipantHasData()
+    {
+        string dir = Path.Combine(StudyDataDir(), ParticipantLabel);
+        return Directory.Exists(dir) && Directory.GetFiles(dir, "*.csv").Length > 0;
     }
 
     // ---- Consent (M59) ----
@@ -393,13 +411,13 @@ private void Awake()
     }
 
     private static readonly string[] ConsentHeader =
-        { "participant_id", "consent_version", "response", "timestamp", "datetime_local" };
+        { "session_id", "participant_id", "consent_version", "response", "timestamp", "datetime_local" };
 
     private void WriteConsentCsv(string response)
     {
         AppendCsvRow(ParticipantLabel, "consent.csv", ConsentHeader, new[]
         {
-            ParticipantLabel, consentForm != null ? consentForm.version : "", response,
+            SessionId, ParticipantLabel, consentForm != null ? consentForm.version : "", response,
             DateTime.UtcNow.ToString("o"), DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
         });
     }
@@ -422,6 +440,8 @@ private void Awake()
         BuildTrials();
         _index = -1;
         TutorialJustCompleted = false;
+        if (string.IsNullOrEmpty(SessionId)) NewSessionId();
+        WriteSessionInfoCsv();
         Debug.Log($"[Session] Participant {participantId}: {PracticeCount} practice + " +
                   $"{_trials.Count - PracticeCount} trials.");
 
@@ -692,6 +712,9 @@ private void Awake()
     {
         if (_phase != SessionPhase.Walk) return;
         _result.walkSeconds = Time.time - _phaseStart;
+        if (graphManager != null) _result.graphPoints = graphManager.DotWorldPositions();
+        WriteGraphPointsCsv(_result);
+        WriteMovementCsv(_result, "walking_log.csv", _result.walkPath);
         SetPhase(SessionPhase.Distractor);
     }
 
@@ -713,7 +736,7 @@ private void Awake()
     {
         if (_phase != SessionPhase.Retrace) return;
         _result.retraceSeconds = Time.time - _phaseStart;
-        WriteRetraceCsv(_result);
+        WriteMovementCsv(_result, "retracing_log.csv", _result.retracePath);
 
         // Briefly show the participant what they just walked, drawn in the same
         // dot/line style as the real graph, before Recall -- purely a post-hoc review.
@@ -935,20 +958,29 @@ private void Update()
 
         // M56: only the actual attempt is recorded -- from the moment the participant
         // stands on the Start marker -- not the walk back to it.
-        if (_phase == SessionPhase.Retrace && head != null && _hasVisitedStartThisPhase)
+        // M62: the Walk is sampled the same way (walking_log.csv).
+        if ((_phase == SessionPhase.Retrace || _phase == SessionPhase.Walk) && head != null &&
+            _hasVisitedStartThisPhase && _result != null)
         {
             _retraceTimer -= Time.deltaTime;
             if (_retraceTimer <= 0f)
             {
                 _retraceTimer = retraceSampleInterval;
                 Vector3 p = head.position;
-                _result.retracePath.Add(new RetraceSample
+                var path = _phase == SessionPhase.Walk ? _result.walkPath : _result.retracePath;
+                if (_walkDriver == null) _walkDriver = FindAnyObjectByType<WalkValueDriver>();
+                Vector3 e = head.rotation.eulerAngles;
+                path.Add(new RetraceSample
                 {
                     timestampUtc = DateTime.UtcNow.ToString("o"),
                     t = Time.time - _phaseStart,
                     x = p.x,
                     y = p.y,
-                    z = p.z
+                    z = p.z,
+                    yaw = e.y,
+                    pitch = e.x > 180f ? e.x - 360f : e.x,
+                    cuesOn = _walkDriver != null && _walkDriver.CuesOn,
+                    cueValue = _walkDriver != null ? _walkDriver.CueValue : 0f
                 });
             }
         }
@@ -1090,31 +1122,45 @@ private void Update()
     // =====================================================================
 
     private static readonly string[] TrialsHeader =
-        { "participant_id", "condition", "audio_cue", "visual_cue", "presentation_order", "trial_in_condition",
+        { "session_id", "participant_id", "condition", "audio_cue", "visual_cue", "presentation_order", "trial_in_condition",
           "dataset_id", "timestamp_start", "timestamp_end", "walk_seconds", "distractor_seconds",
-          "distractor_start_number", "retrace_seconds", "recall_score", "recall_total" };
+          "distractor_start_number", "retrace_seconds", "recall_score", "recall_total",
+          "walk_samples", "retrace_samples" };
 
     private static readonly string[] QuestionsHeader =
-        { "participant_id", "condition", "audio_cue", "visual_cue", "presentation_order", "dataset_id",
-          "question_id", "question_type", "question_text", "correct_answer", "participant_response",
-          "is_correct", "answer_mode", "timestamp" };
+        { "session_id", "participant_id", "condition", "audio_cue", "visual_cue", "presentation_order", "trial_in_condition",
+          "dataset_id", "question_id", "question_type", "question_text", "correct_answer", "participant_response",
+          "abs_error", "error_pct_of_range", "is_correct", "answer_mode", "timestamp" };
 
     private static readonly string[] RetraceHeader =
-        { "participant_id", "condition", "audio_cue", "visual_cue", "presentation_order", "dataset_id",
-          "timestamp", "t_seconds", "head_x", "head_y", "head_z" };
+        { "session_id", "participant_id", "condition", "audio_cue", "visual_cue", "presentation_order", "trial_in_condition",
+          "dataset_id", "timestamp", "t_seconds", "head_x", "head_y", "head_z",
+          "head_yaw_deg", "head_pitch_deg", "cues_on", "cue_value" };
+
+    private static readonly string[] GraphPointsHeader =
+        { "session_id", "participant_id", "condition", "presentation_order", "trial_in_condition", "dataset_id",
+          "dot_index", "day_label", "value", "x", "z" };
+
+    private static readonly string[] SessionInfoHeader =
+        { "session_id", "participant_id", "started_utc", "started_local", "run_type", "xr_device",
+          "unity_version", "condition_order_mode", "latin_square_row", "condition_order",
+          "trials_per_condition", "practice_trials", "experiment_trials", "dataset_pool_size",
+          "dataset_order", "audio_mode", "recall_input_mode", "semantic_visual_variant",
+          "area_width_m", "area_depth_m", "marker_gap_m", "sample_interval_s" };
 
     private void WriteTrialCsv(TrialResult r)
     {
         var (audio, visual) = CueLabels(r.condition);
         AppendCsvRow(ParticipantLabel, DataFile("trials.csv", r.isPractice), TrialsHeader, new[]
         {
-            ParticipantLabel, r.condition, audio, visual, (r.orderIndex + 1).ToString(),
+            SessionId, ParticipantLabel, r.condition, audio, visual, (r.orderIndex + 1).ToString(),
             r.trialInCondition.ToString(), r.datasetName, r.startedUtc, r.finishedUtc,
             r.walkSeconds.ToString("0.###", CultureInfo.InvariantCulture),
             r.distractorSeconds.ToString("0.###", CultureInfo.InvariantCulture),
             r.distractorStartNumber.ToString(),
             r.retraceSeconds.ToString("0.###", CultureInfo.InvariantCulture),
-            r.RecallScore.ToString(), r.questions.Count.ToString()
+            r.RecallScore.ToString(), r.questions.Count.ToString(),
+            r.walkPath.Count.ToString(), r.retracePath.Count.ToString()
         });
     }
 
@@ -1122,18 +1168,25 @@ private void Update()
     {
         var (audio, visual) = CueLabels(_result.condition);
         float? response = q.ResponseValue;
+        // M62: continuous error, not only right/wrong (a typed answer is rarely exact).
+        float range = DatasetRange(_trials[_index].dataset);
+        string absErr = response.HasValue ? Mathf.Abs(response.Value - q.answerValue).ToString("0.###", CultureInfo.InvariantCulture) : "";
+        string pctErr = response.HasValue && range > 0f
+            ? (100f * Mathf.Abs(response.Value - q.answerValue) / range).ToString("0.##", CultureInfo.InvariantCulture) : "";
         AppendCsvRow(ParticipantLabel, DataFile("value_questions.csv", _result.isPractice), QuestionsHeader, new[]
         {
-            ParticipantLabel, _result.condition, audio, visual, (_result.orderIndex + 1).ToString(),
+            SessionId, ParticipantLabel, _result.condition, audio, visual, (_result.orderIndex + 1).ToString(),
+            _result.trialInCondition.ToString(),
             _result.datasetName, "q" + (_result.questions.IndexOf(q) + 1), q.questionType, q.prompt,
             q.answerValue.ToString("0.###", CultureInfo.InvariantCulture),
             response.HasValue ? response.Value.ToString("0.###", CultureInfo.InvariantCulture) : "",
+            absErr, pctErr,
             q.IsCorrect.ToString(), q.AnswerMode, DateTime.UtcNow.ToString("o")
         });
     }
 
     private static readonly string[] QuestionnaireHeader =
-        { "participant_id", "condition", "audio_cue", "visual_cue", "presentation_order", "dataset_id",
+        { "session_id", "participant_id", "condition", "audio_cue", "visual_cue", "presentation_order", "dataset_id",
           "instrument", "subscale", "item_id", "item_text", "scale", "response", "timestamp" };
 
     // One row per item, written when the questionnaire is finished (so answers changed
@@ -1150,7 +1203,7 @@ private void Update()
             var it = postConditionQuestionnaire.items[i];
             AppendCsvRow(ParticipantLabel, "questionnaires.csv", QuestionnaireHeader, new[]
             {
-                ParticipantLabel, _result.condition, audio, visual, order, _result.datasetName,
+                SessionId, ParticipantLabel, _result.condition, audio, visual, order, _result.datasetName,
                 it.instrument, it.subscale, it.id, it.text,
                 it.scale == QuestionnaireScale.Tlx21 ? "0-100" : "1-5",
                 _qnResponses[i].ToString(), now
@@ -1159,7 +1212,7 @@ private void Update()
     }
 
     private static readonly string[] BackgroundHeader =
-        { "participant_id", "item_id", "item_text", "response", "timestamp", "datetime_local" };
+        { "session_id", "participant_id", "item_id", "item_text", "response", "timestamp", "datetime_local" };
 
     // M61: one row per background question (VR experience, age range), answer as its text.
     private void WriteBackgroundCsv()
@@ -1173,37 +1226,110 @@ private void Update()
             string answer = it.scale == QuestionnaireScale.Choice && it.options != null && r >= 0 && r < it.options.Count
                 ? it.options[r] : r.ToString();
             AppendCsvRow(ParticipantLabel, "background.csv", BackgroundHeader,
-                         new[] { ParticipantLabel, it.id, it.text, answer, now, local });
+                         new[] { SessionId, ParticipantLabel, it.id, it.text, answer, now, local });
         }
     }
 
-    private void WriteRetraceCsv(TrialResult r)
+    // M62: one writer for both movement logs (walking_log.csv, retracing_log.csv). Samples
+    // are kept in WORLD space in memory (the retrace-review graph draws them back in place)
+    // but logged in the ExperimentArea frame -- head_x = lateral, head_z = along the walk,
+    // relative to the area centre (M51). graph_points.csv uses the same frame.
+    private void WriteMovementCsv(TrialResult r, string fileName, List<RetraceSample> samples)
     {
         var (audio, visual) = CueLabels(r.condition);
         string order = (r.orderIndex + 1).ToString();
-
-        // M51: samples are kept in WORLD space in memory (the retrace-review graph draws
-        // them back in place), but logged in the ExperimentArea frame -- head_x = lateral,
-        // head_z = along the walk, relative to the area centre -- because the area is now
-        // re-anchored to wherever the participant stood at Start Session. With the area at
-        // the origin facing +Z (the pre-M51 layout) this is identical to world coords, so
-        // analyze_study.py (x = lateral, z = forward) and older data stay comparable.
         if (experimentArea == null) experimentArea = FindAnyObjectByType<ExperimentArea>();
-
-        foreach (var s in r.retracePath)
+        var rows = new List<string[]>(samples.Count);
+        foreach (var s in samples)
         {
             Vector3 p = new Vector3(s.x, s.y, s.z);
             if (experimentArea != null) p = experimentArea.WorldToArea(p);
-
-            AppendCsvRow(ParticipantLabel, DataFile("retracing_log.csv", r.isPractice), RetraceHeader, new[]
+            rows.Add(new[]
             {
-                ParticipantLabel, r.condition, audio, visual, order, r.datasetName,
-                s.timestampUtc, s.t.ToString("0.###", CultureInfo.InvariantCulture),
+                SessionId, ParticipantLabel, r.condition, audio, visual, order, r.trialInCondition.ToString(),
+                r.datasetName, s.timestampUtc, s.t.ToString("0.###", CultureInfo.InvariantCulture),
                 p.x.ToString("0.###", CultureInfo.InvariantCulture),
                 p.y.ToString("0.###", CultureInfo.InvariantCulture),
+                p.z.ToString("0.###", CultureInfo.InvariantCulture),
+                // yaw relative to the walk direction (0 = facing the End marker)
+                Mathf.DeltaAngle(experimentArea != null ? Quaternion.LookRotation(experimentArea.Forward).eulerAngles.y : 0f, s.yaw)
+                    .ToString("0.#", CultureInfo.InvariantCulture),
+                s.pitch.ToString("0.#", CultureInfo.InvariantCulture),
+                s.cuesOn ? "1" : "0",
+                s.cuesOn ? s.cueValue.ToString("0.###", CultureInfo.InvariantCulture) : ""   // blank when no cue is driven
+            });
+        }
+        AppendCsvRows(ParticipantLabel, DataFile(fileName, r.isPractice), RetraceHeader, rows);
+    }
+
+    private void WriteGraphPointsCsv(TrialResult r)
+    {
+        var data = _trials[_index].dataset;
+        if (data == null || r.graphPoints == null) return;
+        if (experimentArea == null) experimentArea = FindAnyObjectByType<ExperimentArea>();
+        string order = (r.orderIndex + 1).ToString();
+        var rows = new List<string[]>();
+        for (int i = 0; i < r.graphPoints.Count && i < data.values.Count; i++)
+        {
+            Vector3 p = experimentArea != null ? experimentArea.WorldToArea(r.graphPoints[i]) : r.graphPoints[i];
+            rows.Add(new[]
+            {
+                SessionId, ParticipantLabel, r.condition, order, r.trialInCondition.ToString(), r.datasetName,
+                (i + 1).ToString(), $"{data.prefix} {(i + 1) * data.dataInterval}",
+                data.values[i].ToString("0.###", CultureInfo.InvariantCulture),
+                p.x.ToString("0.###", CultureInfo.InvariantCulture),
                 p.z.ToString("0.###", CultureInfo.InvariantCulture)
             });
         }
+        AppendCsvRows(ParticipantLabel, DataFile("graph_points.csv", r.isPractice), GraphPointsHeader, rows);
+    }
+
+    private void WriteSessionInfoCsv()
+    {
+        var rs = StudyConfig.Settings;
+        if (experimentArea == null) experimentArea = FindAnyObjectByType<ExperimentArea>();
+        var mode = rs != null ? rs.conditionOrderMode : ConditionOrderMode.Sequential;
+        var condOrder = new List<string>();
+        var dsOrder = new List<string>();
+        foreach (var t in _trials)
+        {
+            if (!t.isPractice && (condOrder.Count == 0 || condOrder[condOrder.Count - 1] != t.condition.ToString()))
+                condOrder.Add(t.condition.ToString());
+            dsOrder.Add((t.isPractice ? "P:" : "") + (t.dataset != null ? t.dataset.name : ""));
+        }
+        string xr = "";
+        try
+        {
+            var devices = new List<UnityEngine.XR.InputDevice>();
+            UnityEngine.XR.InputDevices.GetDevicesWithCharacteristics(UnityEngine.XR.InputDeviceCharacteristics.HeadMounted, devices);
+            if (devices.Count > 0) xr = devices[0].name;
+        }
+        catch (Exception) { }
+        AppendCsvRow(ParticipantLabel, "session_info.csv", SessionInfoHeader, new[]
+        {
+            SessionId, ParticipantLabel, DateTime.UtcNow.ToString("o"), DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
+            rs != null ? rs.runType.ToString() : "", xr, Application.unityVersion,
+            mode.ToString(),
+            mode == ConditionOrderMode.LatinSquare
+                ? (((participantId - 1) % WilliamsRowCount(AllConditions.Length) + WilliamsRowCount(AllConditions.Length))
+                   % WilliamsRowCount(AllConditions.Length) + 1).ToString() : "",
+            string.Join(" > ", condOrder), TrialsPerCondition.ToString(), PracticeCount.ToString(),
+            (_trials.Count - PracticeCount).ToString(), datasetPool.Count.ToString(), string.Join(" ", dsOrder),
+            rs != null ? rs.audioMode.ToString() : "", rs != null ? rs.recallInputMode.ToString() : "",
+            rs != null ? rs.semanticVisualVariant.ToString() : "",
+            experimentArea != null ? experimentArea.Width.ToString("0.###", CultureInfo.InvariantCulture) : "",
+            experimentArea != null ? experimentArea.Depth.ToString("0.###", CultureInfo.InvariantCulture) : "",
+            experimentArea != null ? experimentArea.MarkerGap.ToString("0.###", CultureInfo.InvariantCulture) : "",
+            retraceSampleInterval.ToString("0.###", CultureInfo.InvariantCulture)
+        });
+    }
+
+    private static float DatasetRange(GraphData d)
+    {
+        if (d == null || d.values == null || d.values.Count == 0) return 0f;
+        float lo = float.MaxValue, hi = float.MinValue;
+        foreach (var v in d.values) { if (v < lo) lo = v; if (v > hi) hi = v; }
+        return hi - lo;
     }
 
     // audio_cue/visual_cue ("semantic"/"plain"/"none") per the modified plan's condition
@@ -1247,6 +1373,25 @@ private void Update()
         }
     }
 
+    // Many rows in one open/close (movement logs, graph points).
+    private static void AppendCsvRows(string participantLabel, string fileName, string[] header, List<string[]> rows)
+    {
+        try
+        {
+            string path = Path.Combine(ParticipantDir(participantLabel), fileName);
+            bool exists = File.Exists(path);
+            using (var w = new StreamWriter(path, append: true))
+            {
+                if (!exists) w.WriteLine(string.Join(",", Array.ConvertAll(header, EscapeCsv)));
+                foreach (var row in rows) w.WriteLine(string.Join(",", Array.ConvertAll(row, EscapeCsv)));
+            }
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"[Session] Failed to write {fileName} for {participantLabel}: {e.Message}");
+        }
+    }
+
     private static string EscapeCsv(string value)
     {
         value ??= "";
@@ -1279,7 +1424,10 @@ private void Update()
     // file from before the participant demographics form was removed from the study --
     // nothing writes it any more.
     private static readonly string[] StudyDataFiles =
-        { "trials.csv", "value_questions.csv", "retracing_log.csv", "demographics.csv" };
+        { "trials.csv", "value_questions.csv", "retracing_log.csv", "walking_log.csv", "graph_points.csv",
+          "questionnaires.csv", "consent.csv", "background.csv", "session_info.csv",
+          "practice_trials.csv", "practice_value_questions.csv", "practice_retracing_log.csv",
+          "practice_walking_log.csv", "practice_graph_points.csv", "demographics.csv" };
 
     // =====================================================================
     // Settings-menu data management -- called from the UI's Settings screen.
@@ -1360,10 +1508,12 @@ private void Update()
         foreach (var pdir in Directory.GetDirectories(baseDir))
         {
             bool any = false;
-            foreach (var f in StudyDataFiles)
+            // M62: every CSV in the participant folder (consent, background, questionnaires,
+            // practice_*, graph_points, walking_log, session_info ... not just the original three),
+            // so a reused participant id never inherits leftover rows.
+            foreach (var p in Directory.GetFiles(pdir, "*.csv"))
             {
-                string p = Path.Combine(pdir, f);
-                if (File.Exists(p)) { File.Delete(p); deletedFiles++; any = true; }
+                File.Delete(p); deletedFiles++; any = true;
             }
             if (any) touchedParticipants++;
 

@@ -142,8 +142,65 @@ def list_participants(study_data_dir):
 
 
 def trial_key(row):
-    """(participant_id, presentation_order) uniquely identifies a trial."""
-    return (row.get("participant_id"), row.get("presentation_order"))
+    """(session_id, presentation_order) uniquely identifies a trial (M62). Data from
+    before session_id existed falls back to participant_id."""
+    return (row.get("session_id") or row.get("participant_id"), row.get("presentation_order"))
+
+
+def fnum(row, key):
+    try:
+        return float(row.get(key, ""))
+    except (TypeError, ValueError):
+        return None
+
+
+def recall_errors(question_rows, values):
+    """Mean absolute error and mean error as % of the dataset's range over one trial's
+    recall answers (M62). Uses the logged abs_error/error_pct_of_range when present,
+    else recomputes from correct_answer/participant_response."""
+    rng = (max(values) - min(values)) if values else None
+    abs_e, pct_e = [], []
+    for q in question_rows:
+        a = fnum(q, "abs_error")
+        if a is None:
+            c, r = fnum(q, "correct_answer"), fnum(q, "participant_response")
+            if c is None or r is None:
+                continue
+            a = abs(r - c)
+        abs_e.append(a)
+        pc = fnum(q, "error_pct_of_range")
+        if pc is None and rng:
+            pc = 100.0 * a / rng
+        if pc is not None:
+            pct_e.append(pc)
+    return (round(stats.mean(abs_e), 3) if abs_e else "",
+            round(stats.mean(pct_e), 2) if pct_e else "")
+
+
+def retrace_vs_points(samples, points):
+    """Compare a retrace with the trial's real graph (graph_points.csv rows, same area
+    frame). For each dot, the participant's lateral position (head_x) where they were
+    closest along the walk (head_z) to that dot. Returns shape r (Pearson, dot x vs
+    retrace x), lateral RMSE in metres, and RMSE in data units (x mapped to value with
+    the graph's own linear x->value fit). (M62)"""
+    if len(samples) < 2 or len(points) < 2:
+        return float("nan"), "", ""
+    sz = [(float(s["head_z"]), float(s["head_x"])) for s in samples]
+    px = [float(p["x"]) for p in points]
+    pz = [float(p["z"]) for p in points]
+    pv = [float(p["value"]) for p in points]
+    rx = [min(sz, key=lambda t: abs(t[0] - z))[1] for z in pz]
+    r = pearson(px, rx)
+    rmse_m = math.sqrt(sum((a - b) ** 2 for a, b in zip(px, rx)) / len(px))
+    # value = a + b * x, fitted on the graph's own dots
+    mx, mv = sum(px) / len(px), sum(pv) / len(pv)
+    sxx = sum((x - mx) ** 2 for x in px)
+    rmse_v = ""
+    if sxx > 0:
+        b = sum((x - mx) * (v - mv) for x, v in zip(px, pv)) / sxx
+        a = mv - b * mx
+        rmse_v = round(math.sqrt(sum((a + b * x - v) ** 2 for x, v in zip(rx, pv)) / len(pv)), 3)
+    return r, round(rmse_m, 3), rmse_v
 
 
 def path_metrics(samples):
@@ -352,6 +409,15 @@ def run_analysis(study_data_dir, out_dir=None, datasets_path=None, make_plots=Tr
     for r in retrace_rows:
         retrace_by_trial.setdefault(trial_key(r), []).append(r)
 
+    # M62: recall answers and the graph's ground-truth dot positions, per trial.
+    q_by_trial, pts_by_trial = {}, {}
+    for q in read_all_rows(study_data_dir, "value_questions.csv"):
+        if not participant_id or q.get("participant_id") == participant_id:
+            q_by_trial.setdefault(trial_key(q), []).append(q)
+    for g in read_all_rows(study_data_dir, "graph_points.csv"):
+        if not participant_id or g.get("participant_id") == participant_id:
+            pts_by_trial.setdefault(trial_key(g), []).append(g)
+
     do_plots = HAVE_MPL and bool(datasets) and make_plots
     plots_dir = os.path.join(out_dir, "plots")
     if do_plots:
@@ -377,6 +443,9 @@ def run_analysis(study_data_dir, out_dir=None, datasets_path=None, make_plots=Tr
 
         recall_total = to_int(t, "recall_total")
         recall_correct = to_int(t, "recall_score")
+        abs_err, pct_err = recall_errors(q_by_trial.get(trial_key(t), []), datasets.get(ds, []))
+        pts = sorted(pts_by_trial.get(trial_key(t), []), key=lambda p: to_int(p, "dot_index"))
+        gt_r, gt_rmse_m, gt_rmse_v = retrace_vs_points(samples, pts)
 
         row = dict(t)   # keep every raw trials.csv column
         row.update({
@@ -385,14 +454,28 @@ def run_analysis(study_data_dir, out_dir=None, datasets_path=None, make_plots=Tr
             "retrace_len": round(pm["length"], 3),
             "retrace_x_range": round(pm["x_range"], 3),
             "retrace_z_range": round(pm["z_range"], 3),
-            "retrace_shape_r": round(corr, 3) if not math.isnan(corr) else "",
+            # M62: with graph_points.csv the shape r is computed against the real dot
+            # positions; the old datasets.json proxy is kept only for older data.
+            "retrace_shape_r": (round(gt_r, 3) if not math.isnan(gt_r) else "") if pts
+                               else (round(corr, 3) if not math.isnan(corr) else ""),
+            "recall_abs_error": abs_err,
+            "recall_error_pct": pct_err,
+            "retrace_r_vs_graph": round(gt_r, 3) if not math.isnan(gt_r) else "",
+            "retrace_rmse_m": gt_rmse_m,
+            "retrace_rmse_value": gt_rmse_v,
         })
         rows.append(row)
 
     fieldnames = list(trials[0].keys()) + [
         "recall_pct", "retrace_samples", "retrace_len",
         "retrace_x_range", "retrace_z_range", "retrace_shape_r",
+        "recall_abs_error", "recall_error_pct", "retrace_r_vs_graph", "retrace_rmse_m", "retrace_rmse_value",
     ]
+    # keep columns that only newer files have (union, first-seen order)
+    for r in rows:
+        for k in r.keys():
+            if k not in fieldnames:
+                fieldnames.append(k)
     trials_out = os.path.join(out_dir, "analysis_trials.csv")
     with open(trials_out, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames)
@@ -407,9 +490,11 @@ def run_analysis(study_data_dir, out_dir=None, datasets_path=None, make_plots=Tr
     for cond, rs in sorted(conds.items()):
         pcts = [r["recall_pct"] for r in rs]
         lens = [r["retrace_len"] for r in rs]
+        errs = [float(r["recall_error_pct"]) for r in rs if r.get("recall_error_pct") not in ("", None)]
         cond_rows.append({
             "condition": cond,
             "n_trials": len(rs),
+            "recall_error_pct_mean": round(stats.mean(errs), 2) if errs else "",
             "recall_pct_mean": round(stats.mean(pcts), 1),
             "recall_pct_sd": round(stats.pstdev(pcts), 1) if len(pcts) > 1 else 0.0,
             "retrace_len_mean": round(stats.mean(lens), 3),
@@ -460,16 +545,59 @@ def run_analysis(study_data_dir, out_dir=None, datasets_path=None, make_plots=Tr
             w.writeheader()
             w.writerows(qn_rows)
 
+    # ---- Participant x condition table (M62): one row per participant and condition,
+    # averaged over that condition's trials -- the table for repeated-measures stats.
+    pc = {}
+    for r in rows:
+        pc.setdefault((r.get("participant_id", ""), r.get("condition", "")), []).append(r)
+    qn_by = {(q["participant_id"], q["condition"]): q for q in qn_rows}
+
+    def mean_col(rs, key):
+        vals = []
+        for r in rs:
+            try:
+                vals.append(float(r.get(key, "")))
+            except (TypeError, ValueError):
+                pass
+        return round(stats.mean(vals), 3) if vals else ""
+
+    pc_rows = []
+    for (pid, cond), rs in sorted(pc.items()):
+        row = {
+            "participant_id": pid, "condition": cond,
+            "audio_cue": rs[0].get("audio_cue", ""), "visual_cue": rs[0].get("visual_cue", ""),
+            "n_trials": len(rs),
+            "first_presentation_order": min(to_int(r, "presentation_order") for r in rs),
+            "recall_error_pct": mean_col(rs, "recall_error_pct"),
+            "recall_abs_error": mean_col(rs, "recall_abs_error"),
+            "recall_pct_correct": mean_col(rs, "recall_pct"),
+            "retrace_r_vs_graph": mean_col(rs, "retrace_r_vs_graph"),
+            "retrace_rmse_m": mean_col(rs, "retrace_rmse_m"),
+            "retrace_rmse_value": mean_col(rs, "retrace_rmse_value"),
+            "walk_seconds": mean_col(rs, "walk_seconds"),
+        }
+        q = qn_by.get((pid, cond), {})
+        for k in ("spes_sl_mean", "spes_pa_mean", "cue_visual", "cue_audio", "raw_tlx"):
+            row[k] = q.get(k, "")
+        pc_rows.append(row)
+    pc_out = None
+    if pc_rows:
+        pc_out = os.path.join(out_dir, "analysis_participant_condition.csv")
+        with open(pc_out, "w", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=list(pc_rows[0].keys()))
+            w.writeheader()
+            w.writerows(pc_rows)
+
     n_part = len({t.get("participant_id") for t in trials})
 
     summary_lines = []
     summary_lines.append(f"Parsed {n_part} participant(s), {len(rows)} trial(s).")
     summary_lines.append("")
-    summary_lines.append("Per-condition recall (mean % correct):")
+    summary_lines.append("Per-condition recall (mean error as % of each graph's range; lower = better):")
     for c in cond_rows:
         summary_lines.append(
             f"  {c['condition']:16s} n={c['n_trials']:2d}  "
-            f"recall={c['recall_pct_mean']:5.1f}% (sd {c['recall_pct_sd']:.1f})  "
+            f"recall_error={c['recall_error_pct_mean']}%  exact={c['recall_pct_mean']:5.1f}%  "
             f"retrace_len={c['retrace_len_mean']:.2f}"
         )
     summary_lines.append("")
@@ -491,7 +619,7 @@ def run_analysis(study_data_dir, out_dir=None, datasets_path=None, make_plots=Tr
                 f"  {cond:16s} n={len(rs):2d}  SPES-SL={m('spes_sl_mean')}  SPES-PA={m('spes_pa_mean')}  "
                 f"cueV={m('cue_visual')}  cueA={m('cue_audio')}  RawTLX={m('raw_tlx')}")
 
-    wrote_lines = [trials_out, conds_out, order_out] + ([qn_out] if qn_out else [])
+    wrote_lines = [trials_out, conds_out, order_out] + ([qn_out] if qn_out else []) + ([pc_out] if pc_out else [])
     if do_plots:
         wrote_lines.append(f"{plots_dir}/  ({n_plots} retrace-vs-original PNG(s))")
     elif not datasets:

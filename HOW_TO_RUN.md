@@ -156,6 +156,12 @@ can copy/back up/delete one participant's data independently of everyone else's:
 <persistentDataPath>/StudyData/p01/retracing_log.csv    one row per retrace sample
 <persistentDataPath>/StudyData/p01/questionnaires.csv   one row per questionnaire item (M58)
 <persistentDataPath>/StudyData/p01/consent.csv          consent answer(s) + wording version (M59)
+<persistentDataPath>/StudyData/p01/background.csv       VR experience + age range (M61)
+<persistentDataPath>/StudyData/p01/graph_points.csv     each trial's dots: day, value, x/z = retrace ground truth (M62)
+<persistentDataPath>/StudyData/p01/walking_log.csv      head samples during Walk (same columns as retracing_log) (M62)
+<persistentDataPath>/StudyData/p01/session_info.csv     one row per session: settings, condition + dataset order (M62)
+<persistentDataPath>/StudyData/p01/practice_*.csv       the tutorial trials, same formats (M60)
+Every row carries session_id (participant + start time), so two runs under one id stay separable.
 <persistentDataPath>/StudyData/p02/trials.csv           (next participant, same 3 files)
 ...
 ```

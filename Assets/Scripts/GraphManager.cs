@@ -70,6 +70,15 @@ public class GraphManager : MonoBehaviour
     public bool IsGenerating => _isGenerating;
     public GraphData Data => graphData;
 
+    /// <summary>World positions of the current graph's dots, in data order (M62: logged as
+    /// graph_points.csv, the ground truth the retrace is compared against).</summary>
+    public List<Vector3> DotWorldPositions()
+    {
+        var list = new List<Vector3>(_spawnedDots.Count);
+        foreach (var d in _spawnedDots) if (d != null) list.Add(d.transform.position);
+        return list;
+    }
+
     /// <summary>Swap the dataset to render on the next GenerateGraph (used per trial).</summary>
     public void SetData(GraphData data) => graphData = data;
 
