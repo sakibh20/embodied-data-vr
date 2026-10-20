@@ -1030,6 +1030,7 @@ MonoBehaviour:
   participantId: 1
   retraceSampleInterval: 0.1
   consentForm: {fileID: 11400000, guid: 951cf7064654bcd488610200a32c5b8c, type: 2}
+  backgroundQuestions: {fileID: 11400000, guid: ba1f4a205be77034386d31904fc39d6c, type: 2}
   postConditionQuestionnaire: {fileID: 11400000, guid: edae05a83ef9b1e4b943e1c451057720, type: 2}
   alignAreaToParticipantOnStart: 1
   experimentArea: {fileID: 0}

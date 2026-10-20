@@ -12,15 +12,19 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c235009e1381d474486f6b4d108fc601, type: 3}
   m_Name: ConsentForm
   m_EditorClassIdentifier: Assembly-CSharp::ConsentDefinition
-  version: draft-1
-  title: Before we start
-  body: "Please read the points below. Ask the researcher if anything is unclear.\n\n\u2022
-    I have read the study information sheet and had the chance to ask questions.\n\u2022
-    Taking part is voluntary. I can stop at any time without giving a reason.\n\u2022
-    My movements in the virtual environment and my answers are recorded under a participant
-    code, not my name.\n\u2022 The anonymised data may be used for research and publications.\n\u2022
-    I can take off the headset at any time if I feel unwell."
-  question: Do you agree to take part?
-  agreeLabel: I agree
-  declineLabel: I do not agree
+  version: 2026-10-20
+  title: Consent to take part in the study
+  subtitle: "\u201CAudio and visual cues for remembering data in virtual reality\u201D"
+  body: "\u2022 I have read the information sheet and the privacy notice, and I have
+    had the chance to ask the researcher questions.\n\u2022 I am 18 years of age
+    or older.\n\u2022 I understand that taking part is voluntary and that I can stop
+    at any time without giving a reason.\n\u2022 I understand that my data are labelled
+    only with a participant code and that, after I leave, my data cannot be removed
+    because they are not linked to my name.\n\u2022 I agree that my anonymised data
+    can be used in a master\u2019s thesis, in scientific publications and in later
+    research."
+  checkboxLabel: I agree to take part in this study.
+  continueLabel: Continue
+  consentResponse: I consent
+  noConsentResponse: I do not consent
   declinedMessage: Thank you. The study will not start. Please tell the researcher.

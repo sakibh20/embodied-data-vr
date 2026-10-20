@@ -171,10 +171,20 @@ presentation_order, dataset_id, ...` plus per-file specifics (phase durations an
 score in `trials.csv`; question text/correct answer/response/is_correct/answer_mode in
 `value_questions.csv`; timestamp + head_x/y/z in `retracing_log.csv`).
 
-**Consent (M59):** Start Session first shows the consent screen (text on
-`Assets/ScriptableObjects/ConsentForm.asset` -- replace the placeholder with the approved
-wording and bump `version`). "I agree" starts the first trial; "I do not agree" shows a
-short message and returns to the start screen. Both answers are logged in `consent.csv`.
+**Before the headset (M61):** the participant reads the information sheet and the privacy
+notice on paper (`Privacy Notice/` folder) and can ask questions.
+
+**Consent (M59/M61):** Start Session first shows the consent screen (wording on
+`Assets/ScriptableObjects/ConsentForm.asset`; bump `version` if it changes). Tick "I agree to
+take part in this study." + Continue = "I consent" and the study goes on; Continue without the
+tick = "I do not consent", a short message and back to the start screen. Logged in
+`consent.csv` with the participant id and date/time.
+
+**Background questions (M61):** right after consent: previous VR experience and age range
+(`BackgroundQuestions.asset`), saved to `background.csv`.
+
+**After the session:** the end screen tells the participant to remove the headset; give them the
+laptop with the four open-ended questions (Microsoft Forms).
 
 **Tutorial (M60):** after consent, an instructions screen, then the practice trials listed in
 `RunSettings.tutorialTrials` (now: plain on Energy_d43, then blue spheres + electric sound on

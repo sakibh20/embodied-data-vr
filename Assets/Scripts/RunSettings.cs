@@ -103,6 +103,11 @@ public class RunSettings : ScriptableObject
     [TextArea(2, 6)]
     public string tutorialCompleteText = "You have now completed the tutorial. The experiment starts next.";
 
+    [Header("End of session (M61)")]
+    [TextArea(2, 6)]
+    public string completeText = "Thank you! You can now remove the headset. The researcher will give you a laptop " +
+                                 "for four short open-ended questions.";
+
     [Header("Semantic visual (M55)")]
     [Tooltip("Which spark look the semantic-visual conditions use. A = pointy star, " +
              "B = yellow ball with spark streaks, C = pointy star + glow + streaks. " +

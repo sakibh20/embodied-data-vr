@@ -233,7 +233,8 @@ public class SessionUI : MonoBehaviour
 
             case SessionPhase.Complete:
                 _view.Title.text = "Session complete";
-                _view.Body.text = "Thank you! You can remove the headset.";
+                _view.Body.text = StudyConfig.Settings != null ? StudyConfig.Settings.completeText
+                                                                : "Thank you! You can remove the headset.";
                 AddOptionButton("Next Participant", () => session.ReturnToIdle());
                 break;
         }
@@ -256,7 +257,7 @@ public class SessionUI : MonoBehaviour
 
     // Leading check mark on the currently-selected mode button.
     private static string Tick(CueAudioController.AudioMode current, CueAudioController.AudioMode option)
-        => current == option ? "✓ " : "";
+        => current == option ? "[x] " : "";   // the UI font has no check-mark glyph
 
     private void RenderRecall(string trialTag)
     {
@@ -306,16 +307,19 @@ public class SessionUI : MonoBehaviour
             return;
         }
 
-        // First paragraph goes in the panel's Body text, the rest (the points) below it.
-        string body = c.body ?? "";
-        int split = body.IndexOf("\n\n", System.StringComparison.Ordinal);
-        _view.Body.text = split >= 0 ? body.Substring(0, split) : "";
-        string points = split >= 0 ? body.Substring(split + 2) : body;
-        AddTextRow(points, 30, TextAlignmentOptions.Left, 300);
-        AddTextRow($"<b>{c.question}</b>", 30, TextAlignmentOptions.Center, 50);
-        var row = AddRow(76, 40);
-        AddButtonTo(row, c.declineLabel, () => session.ConsentDecline(), false, true);
-        AddButtonTo(row, c.agreeLabel, () => session.ConsentAgree(), false, true);
+        // M61: supervisor's wording -- study name, the five statements, a tick box and
+        // Continue (ticked = "I consent", unticked = "I do not consent").
+        _view.Body.text = c.subtitle;
+        AddTextRow(c.body, 27, TextAlignmentOptions.Left, 330);
+        bool on = session.ConsentChecked;
+        var tick = AddRow(76, 16);
+        tick.GetComponent<HorizontalLayoutGroup>().childForceExpandWidth = false;   // keep the box square
+        var box = AddButtonTo(tick, on ? "<b>X</b>" : "", () => session.ToggleConsentCheck(), on, true);
+        var boxLe = box.GetComponent<LayoutElement>();
+        boxLe.flexibleWidth = 0f; boxLe.minWidth = 76f; boxLe.preferredWidth = 76f;
+        AddButtonTo(tick, c.checkboxLabel, () => session.ToggleConsentCheck(), false, true);
+        var row = AddRow(68, 40);
+        AddButtonTo(row, c.continueLabel, () => session.ConsentContinue(), false, true);
     }
 
     private static readonly Color SelectedColor = new Color(1f, 0.74f, 0.2f, 1f);
@@ -352,6 +356,23 @@ public class SessionUI : MonoBehaviour
                 AddButtonTo(row, v.ToString(), () => session.SetQnResponse(value), current == value, true);
             }
             AddAnchorRow(item.lowAnchor, "", item.highAnchor);
+        }
+        else if (item.scale == QuestionnaireScale.Choice)
+        {
+            // M61: one button per option, two per row.
+            var opts = item.options ?? new System.Collections.Generic.List<string>();
+            for (int i = 0; i < opts.Count; i += 2)
+            {
+                var row = AddRow(64, 16);
+                int a = i;
+                AddButtonTo(row, opts[a], () => session.SetQnResponse(a), current == a, true);
+                if (i + 1 < opts.Count)
+                {
+                    int b = i + 1;
+                    AddButtonTo(row, opts[b], () => session.SetQnResponse(b), current == b, true);
+                }
+                else AddText(row, "", 24, TextAlignmentOptions.Left);
+            }
         }
         else // Tlx21: 0..100 in steps of 5, like the 21 tick marks of the paper NASA-TLX
         {

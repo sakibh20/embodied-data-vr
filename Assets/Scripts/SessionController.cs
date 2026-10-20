@@ -54,6 +54,11 @@ public class SessionController : MonoBehaviour
              "Leave empty to skip.")]
     [SerializeField] private ConsentDefinition consentForm;
 
+    [Header("Background questions (M61)")]
+    [Tooltip("Asked once right after consent (VR experience, age range). Written to " +
+             "background.csv. Leave empty to skip.")]
+    [SerializeField] private QuestionnaireDefinition backgroundQuestions;
+
     [Header("Post-condition questionnaire (M58)")]
     [Tooltip("Asked once after each condition's LAST trial (not after every trial). " +
              "Leave empty to skip. Items are edited on the asset.")]
@@ -183,13 +188,30 @@ private void Awake()
         PhaseChanged?.Invoke(_phase);
     }
 
-    public QuestionnaireDefinition Questionnaire => postConditionQuestionnaire;
+    // M61: the questionnaire screen serves both the post-condition questionnaire and the
+    // background questions; _qnDef is whichever is running.
+    private QuestionnaireDefinition _qnDef;
+    private bool _qnIsBackground;
+    public bool QnIsBackground => _qnIsBackground;
+
+    private void StartQuestionnaire(QuestionnaireDefinition def, bool background)
+    {
+        _qnDef = def;
+        _qnIsBackground = background;
+        _qnIndex = 0;
+        QnShowingIntro = !string.IsNullOrEmpty(def.intro);
+        _qnResponses = new int[def.Count];
+        for (int i = 0; i < _qnResponses.Length; i++) _qnResponses[i] = -1;
+        SetPhase(SessionPhase.Questionnaire);
+    }
+
+    public QuestionnaireDefinition Questionnaire => _qnDef;
     public QuestionnaireItem CurrentQnItem =>
-        (_phase == SessionPhase.Questionnaire && postConditionQuestionnaire != null &&
-         _qnIndex >= 0 && _qnIndex < postConditionQuestionnaire.Count)
-            ? postConditionQuestionnaire.items[_qnIndex] : null;
+        (_phase == SessionPhase.Questionnaire && _qnDef != null &&
+         _qnIndex >= 0 && _qnIndex < _qnDef.Count)
+            ? _qnDef.items[_qnIndex] : null;
     public int QnNumber => _qnIndex + 1;
-    public int QnCount => postConditionQuestionnaire != null ? postConditionQuestionnaire.Count : 0;
+    public int QnCount => _qnDef != null ? _qnDef.Count : 0;
     public int CurrentQnResponse => (_qnResponses != null && _qnIndex < _qnResponses.Length) ? _qnResponses[_qnIndex] : -1;
     public string ConditionDisplayName => _result != null ? _result.condition : "";
 
@@ -211,6 +233,13 @@ private void Awake()
         if (CurrentQnResponse < 0) return;
         if (_qnIndex < QnCount - 1) { _qnIndex++; PhaseChanged?.Invoke(_phase); return; }
 
+        if (_qnIsBackground)
+        {
+            WriteBackgroundCsv();
+            _qnIsBackground = false;
+            ContinueAfterBackground();
+            return;
+        }
         WriteQuestionnaireCsv();
         ReadyToStartNext = false;
         SetPhase(SessionPhase.TrialComplete);
@@ -304,7 +333,8 @@ private void Awake()
     [ContextMenu("Start Session")]
     public void StartSession()
     {
-        if (_phase != SessionPhase.Idle && _phase != SessionPhase.Consent) return;
+        // Only from Idle: calling it again while the consent screen is up must never skip consent.
+        if (_phase != SessionPhase.Idle) return;
 
         // M59: the consent screen comes first. The area is aligned now, while the
         // participant still stands where the researcher placed them.
@@ -312,6 +342,7 @@ private void Awake()
         {
             if (alignAreaToParticipantOnStart) AlignAreaToParticipant();
             ConsentDeclined = false;
+            ConsentChecked = false;
             SetPhase(SessionPhase.Consent);
             return;
         }
@@ -321,18 +352,34 @@ private void Awake()
     // ---- Consent (M59) ----
     public ConsentDefinition ConsentForm => consentForm;
     public bool ConsentDeclined { get; private set; }
+    /// <summary>State of the "I agree to take part" tick box (M61).</summary>
+    public bool ConsentChecked { get; private set; }
+
+    public void ToggleConsentCheck()
+    {
+        if (_phase != SessionPhase.Consent || ConsentDeclined) return;
+        ConsentChecked = !ConsentChecked;
+        PhaseChanged?.Invoke(_phase);
+    }
+
+    /// <summary>Continue: ticked = consent (logged, study starts); unticked = no consent
+    /// (logged, the declined message is shown).</summary>
+    public void ConsentContinue()
+    {
+        if (ConsentChecked) ConsentAgree(); else ConsentDecline();
+    }
 
     public void ConsentAgree()
     {
         if (_phase != SessionPhase.Consent || ConsentDeclined) return;
-        WriteConsentCsv("agreed");
+        WriteConsentCsv(consentForm != null ? consentForm.consentResponse : "I consent");
         BeginTrials(alignArea: false);
     }
 
     public void ConsentDecline()
     {
         if (_phase != SessionPhase.Consent || ConsentDeclined) return;
-        WriteConsentCsv("declined");
+        WriteConsentCsv(consentForm != null ? consentForm.noConsentResponse : "I do not consent");
         ConsentDeclined = true;
         PhaseChanged?.Invoke(_phase);
     }
@@ -346,14 +393,14 @@ private void Awake()
     }
 
     private static readonly string[] ConsentHeader =
-        { "participant_id", "consent_version", "response", "timestamp" };
+        { "participant_id", "consent_version", "response", "timestamp", "datetime_local" };
 
     private void WriteConsentCsv(string response)
     {
         AppendCsvRow(ParticipantLabel, "consent.csv", ConsentHeader, new[]
         {
             ParticipantLabel, consentForm != null ? consentForm.version : "", response,
-            DateTime.UtcNow.ToString("o")
+            DateTime.UtcNow.ToString("o"), DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
         });
     }
 
@@ -378,6 +425,17 @@ private void Awake()
         Debug.Log($"[Session] Participant {participantId}: {PracticeCount} practice + " +
                   $"{_trials.Count - PracticeCount} trials.");
 
+        // M61: background questions first (they use the questionnaire screen).
+        if (backgroundQuestions != null && backgroundQuestions.Count > 0)
+        {
+            StartQuestionnaire(backgroundQuestions, background: true);
+            return;
+        }
+        ContinueAfterBackground();
+    }
+
+    private void ContinueAfterBackground()
+    {
         // M60: with a tutorial, the instructions screen comes first.
         if (PracticeCount > 0) { SetPhase(SessionPhase.Instructions); return; }
         NextTrial();
@@ -744,11 +802,7 @@ private void Awake()
             if (postConditionQuestionnaire != null && postConditionQuestionnaire.Count > 0 &&
                 IsLastTrialOfCondition(_index))
             {
-                _qnIndex = 0;
-                QnShowingIntro = !string.IsNullOrEmpty(postConditionQuestionnaire.intro);
-                _qnResponses = new int[postConditionQuestionnaire.Count];
-                for (int i = 0; i < _qnResponses.Length; i++) _qnResponses[i] = -1;
-                SetPhase(SessionPhase.Questionnaire);
+                StartQuestionnaire(postConditionQuestionnaire, background: false);
                 return;
             }
 
@@ -1101,6 +1155,25 @@ private void Update()
                 it.scale == QuestionnaireScale.Tlx21 ? "0-100" : "1-5",
                 _qnResponses[i].ToString(), now
             });
+        }
+    }
+
+    private static readonly string[] BackgroundHeader =
+        { "participant_id", "item_id", "item_text", "response", "timestamp", "datetime_local" };
+
+    // M61: one row per background question (VR experience, age range), answer as its text.
+    private void WriteBackgroundCsv()
+    {
+        if (_qnDef == null || _qnResponses == null) return;
+        string now = DateTime.UtcNow.ToString("o"), local = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+        for (int i = 0; i < _qnDef.Count; i++)
+        {
+            var it = _qnDef.items[i];
+            int r = _qnResponses[i];
+            string answer = it.scale == QuestionnaireScale.Choice && it.options != null && r >= 0 && r < it.options.Count
+                ? it.options[r] : r.ToString();
+            AppendCsvRow(ParticipantLabel, "background.csv", BackgroundHeader,
+                         new[] { ParticipantLabel, it.id, it.text, answer, now, local });
         }
     }
 
