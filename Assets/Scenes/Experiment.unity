@@ -1395,12 +1395,13 @@ MonoBehaviour:
   canvasPrefab: {fileID: 3902376000491507158, guid: 254eb9e8bc82b054393dccc2fa0e470c, type: 3}
   optionButtonPrefab: {fileID: 2157731124243171982, guid: f1b20d7afb799174faf152d0791f1b9d, type: 3}
   answerInputPrefab: {fileID: 4069104934078382465, guid: 15f60c45277de6e4e90ee3f7c74aebce, type: 3}
-  localOffset: {x: 0, y: 0.15, z: 2}
+  localOffset: {x: 0, y: 0.15, z: 2.7}
   canvasScale: 0.0025
   refollowAngle: 55
   refollowDelay: 0.8
   retraceInstructionSeconds: 4
   retraceReviewPanelSeconds: 2.5
+  menuHoldSeconds: 1.5
 --- !u!4 &677478254
 Transform:
   m_ObjectHideFlags: 0

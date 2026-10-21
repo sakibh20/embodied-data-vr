@@ -367,6 +367,81 @@ private void Awake()
         return Directory.Exists(dir) && Directory.GetFiles(dir, "*.csv").Length > 0;
     }
 
+    // ---- Researcher controls (M66) ----
+    /// <summary>True while a session is running (consent through the last trial).</summary>
+    public bool InSession => _phase != SessionPhase.Idle && _phase != SessionPhase.Complete;
+
+    /// <summary>Phases the researcher can skip forward from (e.g. the participant cannot
+    /// reach the End marker, or the counting task ran long). Recall and questionnaires
+    /// need real answers, so they are not skippable.</summary>
+    public bool CanSkipStep =>
+        _phase == SessionPhase.Walk || _phase == SessionPhase.Distractor || _phase == SessionPhase.Retrace ||
+        _phase == SessionPhase.RetraceReview || _phase == SessionPhase.TrialComplete ||
+        _phase == SessionPhase.Instructions;
+
+    public void SkipStep()
+    {
+        if (!CanSkipStep) return;
+        LogEvent("skip_step", _phase.ToString());
+        switch (_phase)
+        {
+            case SessionPhase.Walk: EndWalk(); break;
+            case SessionPhase.Distractor: EndDistractor(); break;
+            case SessionPhase.Retrace: EndRetrace(); break;
+            case SessionPhase.RetraceReview: EndRetraceReview(); break;
+            case SessionPhase.Instructions: BeginTutorial(); break;
+            case SessionPhase.TrialComplete: ReadyToStartNext = true; StartNextTrial(); break;
+        }
+    }
+
+    /// <summary>Re-centre the area on where the participant stands now. Only between trials,
+    /// never while a graph is being walked.</summary>
+    public bool CanRecentre =>
+        _phase == SessionPhase.Idle || _phase == SessionPhase.Consent ||
+        _phase == SessionPhase.Instructions || _phase == SessionPhase.TrialComplete;
+
+    public void RecentreArea()
+    {
+        if (!CanRecentre) return;
+        AlignAreaToParticipant();
+        LogEvent("recentre_area", _phase.ToString());
+    }
+
+    /// <summary>End the running session early and return to the start screen. Everything
+    /// recorded so far stays saved; an unfinished trial has no trials.csv row.</summary>
+    public void AbortSession()
+    {
+        if (!InSession) return;
+        LogEvent("session_ended_early", _index >= 0 && _index < _trials.Count ? TrialTag : "");
+        CancelInvoke();
+        if (graphManager != null) { graphManager.ClearRetraceGraph(); graphManager.SetGraphVisible(false); }
+        if (conditionManager != null) conditionManager.SetCondition(ConditionId.Control);
+        Time.timeScale = 1f;
+        _qnIsBackground = false;
+        QnShowingIntro = false;
+        ConsentDeclined = false;
+        _trials.Clear();
+        _index = -1;
+        participantId = SuggestNextParticipantId();
+        SessionId = "";
+        SetPhase(SessionPhase.Idle);
+    }
+
+    private static readonly string[] EventsHeader =
+        { "session_id", "participant_id", "timestamp", "datetime_local", "event", "phase", "detail" };
+
+    /// <summary>session_events.csv: session start/finish, early end, skipped steps,
+    /// re-centring -- so the data shows exactly what the researcher did during a session.</summary>
+    public void LogEvent(string ev, string detail = "")
+    {
+        if (string.IsNullOrEmpty(SessionId)) return;
+        AppendCsvRow(ParticipantLabel, "session_events.csv", EventsHeader, new[]
+        {
+            SessionId, ParticipantLabel, DateTime.UtcNow.ToString("o"), DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
+            ev, _phase.ToString(), detail
+        });
+    }
+
     // ---- Consent (M59) ----
     public ConsentDefinition ConsentForm => consentForm;
     public bool ConsentDeclined { get; private set; }
@@ -442,6 +517,7 @@ private void Awake()
         TutorialJustCompleted = false;
         if (string.IsNullOrEmpty(SessionId)) NewSessionId();
         WriteSessionInfoCsv();
+        LogEvent("session_started", $"{_trials.Count - PracticeCount} trials, {PracticeCount} practice");
         Debug.Log($"[Session] Participant {participantId}: {PracticeCount} practice + " +
                   $"{_trials.Count - PracticeCount} trials.");
 
@@ -505,6 +581,13 @@ private void Awake()
     /// keep reusing the same participantId that was only ever suggested once, at
     /// Awake -- every subsequent run would silently log under the same participant.
     /// </summary>
+    /// <summary>Re-suggest the participant id from what is on disk (after clearing data).</summary>
+    public void RefreshSuggestedParticipant()
+    {
+        if (_phase != SessionPhase.Idle) return;
+        participantId = SuggestNextParticipantId();
+    }
+
     public void ReturnToIdle()
     {
         if (_phase != SessionPhase.Complete) return;
@@ -688,6 +771,7 @@ private void Awake()
 
     private void FinishSession()
     {
+        LogEvent("session_complete");
         SetPhase(SessionPhase.Complete);
         Debug.Log("[Session] Complete.");
     }
@@ -1429,7 +1513,22 @@ private void Update()
         { "trials.csv", "value_questions.csv", "retracing_log.csv", "walking_log.csv", "graph_points.csv",
           "questionnaires.csv", "consent.csv", "background.csv", "session_info.csv",
           "practice_trials.csv", "practice_value_questions.csv", "practice_retracing_log.csv",
-          "practice_walking_log.csv", "practice_graph_points.csv", "demographics.csv" };
+          "practice_walking_log.csv", "practice_graph_points.csv", "session_events.csv", "demographics.csv" };
+
+    /// <summary>Short summary for the in-app data screen: participant folders and rows of trials.</summary>
+    public static string StudyDataShortSummary(out int participants)
+    {
+        string baseDir = StudyDataDir();
+        participants = 0; int trials = 0;
+        foreach (var pdir in Directory.GetDirectories(baseDir))
+        {
+            if (Directory.GetFiles(pdir, "*.csv").Length == 0) continue;
+            participants++;
+            string t = Path.Combine(pdir, "trials.csv");
+            if (File.Exists(t)) trials += Math.Max(0, File.ReadAllLines(t).Length - 1);
+        }
+        return $"{participants} participant folder(s), {trials} completed trial(s)";
+    }
 
     // =====================================================================
     // Settings-menu data management -- called from the UI's Settings screen.

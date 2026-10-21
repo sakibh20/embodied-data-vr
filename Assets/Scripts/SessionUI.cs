@@ -43,7 +43,7 @@ public class SessionUI : MonoBehaviour
     [Header("Placement (world-anchored, M51)")]
     [Tooltip("Where the panel is placed relative to the head when it appears: x = right, " +
              "y = up, z = forward (metres). Facing is yaw-only so it stays upright.")]
-    [SerializeField] private Vector3 localOffset = new Vector3(0f, 0.15f, 2f);
+    [SerializeField] private Vector3 localOffset = new Vector3(0f, 0.15f, 2.7f);
     [SerializeField] private float canvasScale = 0.0025f;
     [Tooltip("If the panel is more than this many degrees (left/right) from where the " +
              "participant is looking for refollowDelay seconds, it re-centres in front of " +
@@ -104,6 +104,14 @@ public class SessionUI : MonoBehaviour
         ClearItems();
         if (_view == null) return;
 
+        // M66: the researcher menu overrides every phase while open.
+        if (_menuOpen)
+        {
+            _view.gameObject.SetActive(true);
+            RenderResearcherMenu();
+            return;
+        }
+
         // Walk has no interaction and no instruction -- hidden immediately (unchanged).
         // Retrace briefly SHOWS an instruction (M36: "walk back to the start, then
         // retrace") since nothing else tells the participant they need to physically
@@ -162,14 +170,14 @@ public class SessionUI : MonoBehaviour
                 AddOptionButton($"+  Participant  ({session.ParticipantLabel})",
                           () => { session.IncrementParticipantId(); Render(SessionPhase.Idle); });
                 AddOptionButton("Settings", () => { _settingsOpen = true; Render(SessionPhase.Idle); });
-                AddOptionButton("Start Session", () => session.StartSession());
+                Cta(AddOptionButton("Start Session", () => session.StartSession()));
                 break;
 
             case SessionPhase.Distractor:
                 _view.Title.text = trialTag + "Counting task";
                 _view.Body.text = $"Count out loud backwards from <b>{session.DistractorStartNumber}</b> " +
                              "in steps of 3, until told to stop.";
-                AddOptionButton("Done", () => session.EndDistractor());
+                Cta(AddOptionButton("Done", () => session.EndDistractor()));
                 break;
 
             case SessionPhase.Recall:
@@ -194,7 +202,7 @@ public class SessionUI : MonoBehaviour
                 _view.Body.text = cut >= 0 ? txt.Substring(0, cut) : "";
                 AddTextRow(cut >= 0 ? txt.Substring(cut + 2) : txt, 28, TextAlignmentOptions.Left, 300);
                 var row = AddRow(68, 40);
-                AddButtonTo(row, "Start the tutorial", () => session.BeginTutorial(), false, true);
+                Cta(AddButtonTo(row, "Start the tutorial", () => session.BeginTutorial(), false, true));
                 break;
             }
 
@@ -208,7 +216,7 @@ public class SessionUI : MonoBehaviour
                     if (session.ReadyToStartNext)
                     {
                         _view.Body.text = done + "\n\nPress Start the experiment when you're ready.";
-                        AddOptionButton("Start the experiment", () => session.StartNextTrial());
+                        Cta(AddOptionButton("Start the experiment", () => session.StartNextTrial()));
                     }
                     else
                         _view.Body.text = done + "\n\nWalk back to the <b>Start</b> marker to continue.";
@@ -218,7 +226,7 @@ public class SessionUI : MonoBehaviour
                 if (session.ReadyToStartNext)
                 {
                     _view.Body.text = "Nice work! Press Start Next Trial when you're ready to continue.";
-                    AddOptionButton("Start Next Trial", () => session.StartNextTrial());
+                    Cta(AddOptionButton("Start Next Trial", () => session.StartNextTrial()));
                 }
                 else
                 {
@@ -230,9 +238,119 @@ public class SessionUI : MonoBehaviour
                 _view.Title.text = "Session complete";
                 _view.Body.text = StudyConfig.Settings != null ? StudyConfig.Settings.completeText
                                                                 : "Thank you! You can remove the headset.";
-                AddOptionButton("Next Participant", () => session.ReturnToIdle());
+                Cta(AddOptionButton("Next Participant", () => session.ReturnToIdle()));
                 break;
         }
+    }
+
+    // =====================================================================
+    // Researcher menu (M66): hold the LEFT controller's menu button for 1.5 s
+    // (Esc on a keyboard) at any time. Participants won't trigger it by accident.
+    // =====================================================================
+
+    [Header("Researcher menu (M66)")]
+    [SerializeField] private float menuHoldSeconds = 1.5f;
+    private bool _menuOpen;
+    private string _menuConfirm = "";   // "", "end", "exit"
+    private float _menuHold;
+    private bool _menuHoldFired;
+    private float _sessionStartTime = -1f;
+
+    private void Update()
+    {
+        bool held = false, tapped = false;
+        var left = UnityEngine.XR.InputDevices.GetDeviceAtXRNode(UnityEngine.XR.XRNode.LeftHand);
+        if (left.isValid && left.TryGetFeatureValue(UnityEngine.XR.CommonUsages.menuButton, out bool m)) held = m;
+        var kb = UnityEngine.InputSystem.Keyboard.current;
+        if (kb != null && kb.escapeKey.wasPressedThisFrame) tapped = true;
+
+        if (held) { _menuHold += Time.unscaledDeltaTime; if (!_menuHoldFired && _menuHold >= menuHoldSeconds) { _menuHoldFired = true; tapped = true; } }
+        else { _menuHold = 0f; _menuHoldFired = false; }
+
+        if (tapped) SetMenuOpen(!_menuOpen);
+        if (session != null && session.InSession && _sessionStartTime < 0f) _sessionStartTime = Time.unscaledTime;
+        if (session != null && !session.InSession) _sessionStartTime = -1f;
+    }
+
+    // M66: a red "End session" button pinned to the top-right corner of the panel,
+    // visible whenever the panel is shown during a session (not inside the menus).
+    // It opens a confirm screen first, so a stray click never ends a session.
+    private SessionOptionButton _quitButton;
+    private bool _fromQuitButton;   // Cancel then goes straight back to the session
+
+    private void UpdateQuitButton()
+    {
+        if (_quitButton == null)
+        {
+            if (optionButtonPrefab == null) return;
+            _quitButton = Instantiate(optionButtonPrefab, _view.transform);
+            var rt = (RectTransform)_quitButton.transform;
+            rt.anchorMin = rt.anchorMax = new Vector2(1f, 1f);
+            rt.pivot = new Vector2(1f, 1f);
+            rt.sizeDelta = new Vector2(250f, 56f);
+            rt.anchoredPosition = new Vector2(-20f, -18f);
+            var le = _quitButton.GetComponent<LayoutElement>();
+            if (le != null) le.ignoreLayout = true;
+            if (_quitButton.Label != null) { _quitButton.Label.text = "End session"; _quitButton.Label.enableAutoSizing = false; _quitButton.Label.fontSize = 24; }
+            if (_quitButton.Button != null)
+                _quitButton.Button.onClick.AddListener(() => { _menuOpen = true; _menuConfirm = "end"; _fromQuitButton = true; Render(session.Phase); });
+            Danger(_quitButton);
+        }
+        bool show = session != null && session.InSession && !_menuOpen && !_settingsOpen;
+        if (_quitButton.gameObject.activeSelf != show) _quitButton.gameObject.SetActive(show);
+        _quitButton.transform.SetAsLastSibling();
+    }
+
+    private void SetMenuOpen(bool open)
+    {
+        _menuOpen = open;
+        _menuConfirm = "";
+        _fromQuitButton = false;
+        Render(session != null ? session.Phase : SessionPhase.Idle);
+        if (open) PlaceInFrontOfHead();
+    }
+
+    private void RenderResearcherMenu()
+    {
+        _view.Title.text = "Researcher menu";
+        string elapsed = _sessionStartTime >= 0f ? $"{(Time.unscaledTime - _sessionStartTime) / 60f:0} min" : "-";
+        string status = session.InSession
+            ? $"{session.ParticipantLabel} · {session.Phase} · {(session.TotalTrials > 0 && session.TrialNumber > 0 ? session.TrialTag : "-")} · {elapsed}"
+            : $"No session running · next participant {session.ParticipantLabel}";
+        _view.Body.text = status;
+
+        if (_menuConfirm == "end")
+        {
+            AddTextRow("End this session now? Everything recorded so far stays saved; the current trial is not completed.", 26, TextAlignmentOptions.Center, 80);
+            var r = AddRow(68, 40);
+            Secondary(AddButtonTo(r, "Cancel", () =>
+            {
+                if (_fromQuitButton) SetMenuOpen(false);
+                else { _menuConfirm = ""; Render(session.Phase); }
+            }, false, true));
+            Danger(AddButtonTo(r, "Yes, end session", () => { session.AbortSession(); SetMenuOpen(false); }, false, true));
+            return;
+        }
+        if (_menuConfirm == "exit")
+        {
+            AddTextRow(session.InSession ? "Close the app? The running session ends here (data so far stays saved)." : "Close the app?", 26, TextAlignmentOptions.Center, 80);
+            var r = AddRow(68, 40);
+            Secondary(AddButtonTo(r, "Cancel", () => { _menuConfirm = ""; Render(session.Phase); }, false, true));
+            Danger(AddButtonTo(r, "Yes, close the app", () => { if (session.InSession) session.AbortSession(); Application.Quit(); }, false, true));
+            return;
+        }
+
+        var r1 = AddRow(64, 20);
+        Cta(AddButtonTo(r1, "Continue", () => SetMenuOpen(false), false, true));
+        AddButtonTo(r1, "Skip this step", () => { session.SkipStep(); SetMenuOpen(false); }, false, session.CanSkipStep);
+        var r2 = AddRow(64, 20);
+        AddButtonTo(r2, "Re-centre area here", () => { session.RecentreArea(); SetMenuOpen(false); }, false, session.CanRecentre);
+        Danger(AddButtonTo(r2, "End session", () => { _menuConfirm = "end"; Render(session.Phase); }, false, session.InSession));
+        var r3 = AddRow(64, 20);
+        AddButtonTo(r3, "Settings", () => { _menuOpen = false; _settingsOpen = true; Render(session.Phase); }, false, !session.InSession);
+        AddButtonTo(r3, "Close app", () => { _menuConfirm = "exit"; Render(session.Phase); }, false, true);
+        AddTextRow("<size=80%>Skip: Walk / counting / Retrace / review / between trials. Re-centre: only between trials. Settings: only when no session is running.</size>",
+                   22, TextAlignmentOptions.Center, 60);
     }
 
     // =====================================================================
@@ -282,10 +400,36 @@ public class SessionUI : MonoBehaviour
         var pad = AddText(r5, "", 24, TextAlignmentOptions.Left).GetComponent<LayoutElement>();   // empty right half
         pad.flexibleWidth = 1f; pad.minWidth = 150f + 60f + 190f + 60f + 30f;
 
+        // M66: study data on this device
+        string summary = SessionController.StudyDataShortSummary(out int nParticipants);
+        if (_confirmClear)
+        {
+            AddTextRow($"<color=#FF6B6B><b>Delete ALL study data on this headset?</b></color> {summary}. This cannot be undone -- copy it to the PC first.",
+                       24, TextAlignmentOptions.Center, 64);
+            var c = AddRow(60, 40);
+            Secondary(AddButtonTo(c, "Cancel", () => { _confirmClear = false; Render(SessionPhase.Idle); }, false, true));
+            Danger(AddButtonTo(c, "Yes, delete everything", () =>
+            {
+                _clearResult = SessionController.ClearAllStudyData();
+                _confirmClear = false;
+                session.RefreshSuggestedParticipant();
+                Render(SessionPhase.Idle);
+            }, false, true));
+            return;
+        }
+        var data = AddRow(60, 20);
+        AddText(data, $"Study data: {summary}" + (string.IsNullOrEmpty(_clearResult) ? "" : $"  <size=80%>({_clearResult})</size>"),
+                22, TextAlignmentOptions.Left);
+        Danger(AddButtonTo(data, "Delete all data…", () => { _confirmClear = true; _clearResult = ""; Render(SessionPhase.Idle); }, false, nParticipants > 0))
+            .GetComponent<LayoutElement>().flexibleWidth = 0.5f;
+
         var nav = AddRow(64, 40);
-        AddButtonTo(nav, "Reset to defaults", () => { RuntimeSettings.ResetToDefaults(); Render(SessionPhase.Idle); }, false, true);
-        AddButtonTo(nav, "Done", () => { _settingsOpen = false; Render(SessionPhase.Idle); }, false, true);
+        Secondary(AddButtonTo(nav, "Reset to defaults", () => { RuntimeSettings.ResetToDefaults(); Render(SessionPhase.Idle); }, false, true));
+        Cta(AddButtonTo(nav, "Done", () => { _settingsOpen = false; _clearResult = ""; Render(SessionPhase.Idle); }, false, true));
     }
+
+    private bool _confirmClear;
+    private string _clearResult = "";
 
     private RectTransform AddSettingsRow()
     {
@@ -391,7 +535,7 @@ public class SessionUI : MonoBehaviour
         {
             _view.Body.text = c.declinedMessage;
             var back = AddRow(68, 40);
-            AddButtonTo(back, "Back to start screen", () => session.ConsentBackToIdle(), false, true);
+            Cta(AddButtonTo(back, "Back to start screen", () => session.ConsentBackToIdle(), false, true));
             return;
         }
 
@@ -407,8 +551,23 @@ public class SessionUI : MonoBehaviour
         boxLe.flexibleWidth = 0f; boxLe.minWidth = 76f; boxLe.preferredWidth = 76f;
         AddButtonTo(tick, c.checkboxLabel, () => session.ToggleConsentCheck(), false, true);
         var row = AddRow(68, 40);
-        AddButtonTo(row, c.continueLabel, () => session.ConsentContinue(), false, true);
+        Cta(AddButtonTo(row, c.continueLabel, () => session.ConsentContinue(), false, true));
     }
+
+    // M66: call-to-action buttons (continue / next / start) are green, secondary actions
+    // (back / cancel) grey, destructive ones red; answer buttons keep the prefab blue.
+    private static readonly Color CtaColor = new Color(0.20f, 0.55f, 0.30f, 1f);
+    private static readonly Color SecondaryColor = new Color(0.36f, 0.38f, 0.42f, 1f);
+    private static readonly Color DangerColor = new Color(0.72f, 0.22f, 0.20f, 1f);
+
+    private static SessionOptionButton Tint(SessionOptionButton b, Color c)
+    {
+        if (b != null && b.Button != null && b.Button.targetGraphic != null) b.Button.targetGraphic.color = c;
+        return b;
+    }
+    private static SessionOptionButton Cta(SessionOptionButton b) => Tint(b, CtaColor);
+    private static SessionOptionButton Secondary(SessionOptionButton b) => Tint(b, SecondaryColor);
+    private static SessionOptionButton Danger(SessionOptionButton b) => Tint(b, DangerColor);
 
     private static readonly Color SelectedColor = new Color(1f, 0.74f, 0.2f, 1f);
 
@@ -423,7 +582,7 @@ public class SessionUI : MonoBehaviour
             _view.Title.text = def != null ? def.title : "Questionnaire";
             _view.Body.text = def != null ? def.intro : "";
             var startRow = AddRow(68, 40);
-            AddButtonTo(startRow, "Start", () => session.QnBeginItems(), false, true);
+            Cta(AddButtonTo(startRow, "Start", () => session.QnBeginItems(), false, true));
             return;
         }
 
@@ -474,9 +633,9 @@ public class SessionUI : MonoBehaviour
         }
 
         var nav = AddRow(68, 40);
-        AddButtonTo(nav, "Back", () => session.QnBack(), false, session.QnNumber > 1);
-        AddButtonTo(nav, session.QnNumber < session.QnCount ? "Next" : "Finish",
-                    () => session.QnNext(), false, current >= 0);
+        Secondary(AddButtonTo(nav, "Back", () => session.QnBack(), false, session.QnNumber > 1));
+        Cta(AddButtonTo(nav, session.QnNumber < session.QnCount ? "Next" : "Finish",
+                    () => session.QnNext(), false, current >= 0));
     }
 
     // A horizontal row inside the scrollable content column.
@@ -585,6 +744,7 @@ public class SessionUI : MonoBehaviour
     private void LateUpdate()
     {
         if (_view == null) return;
+        UpdateQuitButton();
         bool visible = _view.gameObject.activeSelf;
         SessionPhase phase = session != null ? session.Phase : SessionPhase.Idle;
 
@@ -653,12 +813,12 @@ public class SessionUI : MonoBehaviour
         return FindAnyObjectByType<Camera>() is Camera c ? c.transform : null;
     }
 
-    private void AddOptionButton(string label, UnityEngine.Events.UnityAction onClick)
+    private SessionOptionButton AddOptionButton(string label, UnityEngine.Events.UnityAction onClick)
     {
         if (optionButtonPrefab == null || _view == null || _view.Content == null)
         {
             Debug.LogError("[SessionUI] Missing optionButtonPrefab or canvas Content.");
-            return;
+            return null;
         }
 
         var item = Instantiate(optionButtonPrefab, _view.Content);
@@ -666,6 +826,7 @@ public class SessionUI : MonoBehaviour
 
         if (item.Label != null) item.Label.text = label;
         if (item.Button != null) item.Button.onClick.AddListener(onClick);
+        return item;
     }
 
     private void AddAnswerInput(RecallQuestion q)

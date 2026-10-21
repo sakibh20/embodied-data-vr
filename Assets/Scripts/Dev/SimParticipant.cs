@@ -20,8 +20,13 @@ public class SimParticipant : MonoBehaviour
     private SessionPhase _routeFor = SessionPhase.Idle;
     private int _routeTrial = -1;
 
+    /// <summary>What to move. Default: this transform. In VR set to the XR Origin root so the
+    /// tracked head (PlayerRig.Head) follows the route; the head's own tracked offset is kept.</summary>
+    public Transform mover;
+
     void Awake()
     {
+        if (mover == null) mover = transform;
         _session = FindAnyObjectByType<SessionController>();
         _area = FindAnyObjectByType<ExperimentArea>();
         _graph = FindAnyObjectByType<GraphManager>();
@@ -67,13 +72,15 @@ public class SimParticipant : MonoBehaviour
             }
         }
         if (phase != _routeFor || _session.TrialNumber != _routeTrial) BuildRoute(phase);
+        if (phase == SessionPhase.Instructions && autoAnswer) { _session.BeginTutorial(); return; }
         if (_leg >= _route.Count) return;
-        Vector3 pos = transform.position;
-        Vector3 target = new Vector3(_route[_leg].x, pos.y, _route[_leg].z);
+        Transform head = PlayerRig.Head != null ? PlayerRig.Head : mover;
+        Vector3 pos = head.position; pos.y = 0f;
+        Vector3 target = new Vector3(_route[_leg].x, 0f, _route[_leg].z);
         Vector3 next = Vector3.MoveTowards(pos, target, speed * Time.deltaTime);
-        Vector3 dir = target - pos; dir.y = 0;
-        if (dir.sqrMagnitude > 1e-4f) transform.rotation = Quaternion.LookRotation(dir);
-        transform.position = next;
+        Vector3 dir = target - pos;
+        if (mover == head && dir.sqrMagnitude > 1e-4f) mover.rotation = Quaternion.LookRotation(dir);
+        mover.position += next - pos;   // moves the head by the same horizontal step
         if ((next - target).sqrMagnitude < 1e-4f) _leg++;
     }
 

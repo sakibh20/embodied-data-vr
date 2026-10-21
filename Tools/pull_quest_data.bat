@@ -5,7 +5,9 @@ setlocal
 set ADB="C:\Program Files\Unity\Hub\Editor\6000.3.10f1\Editor\Data\PlaybackEngines\AndroidPlayer\SDK\platform-tools\adb.exe"
 %ADB% start-server >nul 2>&1
 set QUEST=
-for /f "tokens=1,2" %%a in ('%ADB% devices -l ^| findstr /c:"model:Quest"') do if "%%b"=="device" set QUEST=%%a
+REM (device list goes through a temp file: cmd's for /f can't run a quoted path with spaces plus a pipe)
+%ADB% devices -l > "%TEMP%\quest_devices.txt" 2>&1
+for /f "tokens=1,2" %%a in ('findstr /c:"model:Quest" "%TEMP%\quest_devices.txt"') do if "%%b"=="device" set QUEST=%%a
 if "%QUEST%"=="" (
   echo No Quest found. Connected devices:
   %ADB% devices -l
