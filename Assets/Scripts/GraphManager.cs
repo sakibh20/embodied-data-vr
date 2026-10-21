@@ -70,6 +70,14 @@ public class GraphManager : MonoBehaviour
     public bool IsGenerating => _isGenerating;
     public GraphData Data => graphData;
 
+    /// <summary>M64: graph length along the walk (m); set from the in-app settings. Used by
+    /// the next GenerateGraph.</summary>
+    public float TargetWalkLength
+    {
+        get => targetWalkLength;
+        set => targetWalkLength = Mathf.Max(0.5f, value);
+    }
+
     /// <summary>World positions of the current graph's dots, in data order (M62: logged as
     /// graph_points.csv, the ground truth the retrace is compared against).</summary>
     public List<Vector3> DotWorldPositions()

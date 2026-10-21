@@ -520,7 +520,8 @@ private void Awake()
     {
         _trials.Clear();
         PracticeCount = 0;
-        var tut = StudyConfig.Settings != null ? StudyConfig.Settings.tutorialTrials : null;
+        var tut = StudyConfig.Settings != null && StudyConfig.Settings.tutorialEnabled
+            ? StudyConfig.Settings.tutorialTrials : null;
         if (tut != null)
             foreach (var t in tut)
             {
@@ -1146,7 +1147,7 @@ private void Update()
           "unity_version", "condition_order_mode", "latin_square_row", "condition_order",
           "trials_per_condition", "practice_trials", "experiment_trials", "dataset_pool_size",
           "dataset_order", "audio_mode", "recall_input_mode", "semantic_visual_variant",
-          "area_width_m", "area_depth_m", "marker_gap_m", "sample_interval_s" };
+          "area_width_m", "area_depth_m", "marker_gap_m", "sample_interval_s", "walk_length_m" };
 
     private void WriteTrialCsv(TrialResult r)
     {
@@ -1320,7 +1321,8 @@ private void Update()
             experimentArea != null ? experimentArea.Width.ToString("0.###", CultureInfo.InvariantCulture) : "",
             experimentArea != null ? experimentArea.Depth.ToString("0.###", CultureInfo.InvariantCulture) : "",
             experimentArea != null ? experimentArea.MarkerGap.ToString("0.###", CultureInfo.InvariantCulture) : "",
-            retraceSampleInterval.ToString("0.###", CultureInfo.InvariantCulture)
+            retraceSampleInterval.ToString("0.###", CultureInfo.InvariantCulture),
+            graphManager != null ? graphManager.TargetWalkLength.ToString("0.###", CultureInfo.InvariantCulture) : ""
         });
     }
 

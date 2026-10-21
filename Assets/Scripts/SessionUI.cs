@@ -145,30 +145,23 @@ public class SessionUI : MonoBehaviour
         switch (phase)
         {
             case SessionPhase.Idle:
+                if (_settingsOpen) { RenderSettings(); break; }
                 _view.Title.text = "Data Physicalisation Study";
                 {
-                    string body = $"Participant: <b>{session.ParticipantLabel}</b> (auto-suggested from existing data -- adjust below if this is wrong)\n\n";
+                    string body = $"Participant: <b>{session.ParticipantLabel}</b> (auto-suggested from existing data -- adjust below if this is wrong)\n";
                     if (session.ParticipantHasData())
-                        body = $"<color=#FF6B6B><b>{session.ParticipantLabel} already has recorded data.</b> Pick another id unless you are deliberately continuing this participant.</color>\n\n" + body;
-                    if (audioMode != null)
-                        body += $"Audio cue mode: <b>{ModeLabel(audioMode.Mode)}</b>\nChoose a mode, then start.";
-                    else
-                        body += "Ready to begin.";
+                        body = $"<color=#FF6B6B><b>{session.ParticipantLabel} already has recorded data.</b> Pick another id unless you are deliberately continuing this participant.</color>\n" + body;
+                    var v = RuntimeSettings.Current;
+                    if (v != null)
+                        body += $"<size=80%>Walk {v.walkLength:0.0} m · {v.trialsPerCondition} trial(s)/condition · {v.conditionOrder} · " +
+                                $"tutorial {(v.tutorial ? "on" : "off")} · audio {ModeLabel(v.audioMode)}</size>";
                     _view.Body.text = body;
                 }
                 AddOptionButton($"−  Participant  ({session.ParticipantLabel})",
                           () => { session.DecrementParticipantId(); Render(SessionPhase.Idle); });
                 AddOptionButton($"+  Participant  ({session.ParticipantLabel})",
                           () => { session.IncrementParticipantId(); Render(SessionPhase.Idle); });
-                if (audioMode != null)
-                {
-                    AddOptionButton(Tick(audioMode.Mode, CueAudioController.AudioMode.PitchOnly) + "Audio: Pitch only",
-                              () => { audioMode.SetPitchOnly(); Render(SessionPhase.Idle); });
-                    AddOptionButton(Tick(audioMode.Mode, CueAudioController.AudioMode.TempoOnly) + "Audio: Tempo only",
-                              () => { audioMode.SetTempoOnly(); Render(SessionPhase.Idle); });
-                    AddOptionButton(Tick(audioMode.Mode, CueAudioController.AudioMode.Both) + "Audio: Both",
-                              () => { audioMode.SetBoth(); Render(SessionPhase.Idle); });
-                }
+                AddOptionButton("Settings", () => { _settingsOpen = true; Render(SessionPhase.Idle); });
                 AddOptionButton("Start Session", () => session.StartSession());
                 break;
 
@@ -239,6 +232,99 @@ public class SessionUI : MonoBehaviour
                                                                 : "Thank you! You can remove the headset.";
                 AddOptionButton("Next Participant", () => session.ReturnToIdle());
                 break;
+        }
+    }
+
+    // =====================================================================
+    // In-app settings (M64): researcher-only, reachable from the Idle screen.
+    // Each setting is a  label  <  value  >  stepper; two per row.
+    // =====================================================================
+
+    private bool _settingsOpen;
+
+    private void RenderSettings()
+    {
+        var v = RuntimeSettings.Current;
+        _view.Title.text = "Study settings";
+        _view.Body.text = "Saved on this headset and used from the next session on." +
+                          (RuntimeSettings.HasSavedChanges ? "" : "  <size=80%>(currently the defaults)</size>");
+        if (v == null) return;
+
+        void Changed() { RuntimeSettings.Save(); Render(SessionPhase.Idle); }
+
+        var r1 = AddSettingsRow();
+        AddStepper(r1, "Walk length", $"{v.walkLength:0.0} m",
+            d => { v.walkLength = RuntimeSettings.Step(v.walkLength, 0.5f, 2f, 15f, d); Changed(); });
+        AddStepper(r1, "Area width", $"{v.areaWidth:0.0} m",
+            d => { v.areaWidth = RuntimeSettings.Step(v.areaWidth, 0.5f, 2f, 10f, d); Changed(); });
+
+        var r2 = AddSettingsRow();
+        AddStepper(r2, "Marker gap", $"{v.markerGap:0.0} m",
+            d => { v.markerGap = RuntimeSettings.Step(v.markerGap, 0.1f, 0.1f, 1.5f, d); Changed(); });
+        AddStepper(r2, "Trials / condition", v.trialsPerCondition.ToString(),
+            d => { v.trialsPerCondition = Mathf.Clamp(v.trialsPerCondition + d, 1, 10); Changed(); });
+
+        var r3 = AddSettingsRow();
+        AddStepper(r3, "Condition order", OrderLabel(v.conditionOrder),
+            d => { v.conditionOrder = RuntimeSettings.Cycle(v.conditionOrder, d); Changed(); });
+        AddStepper(r3, "Recall answers", v.recallInput == RecallInputMode.TextEntry ? "Number pad" : "4 choices",
+            d => { v.recallInput = RuntimeSettings.Cycle(v.recallInput, d); Changed(); });
+
+        var r4 = AddSettingsRow();
+        AddStepper(r4, "Audio cue", ModeLabel(v.audioMode),
+            d => { v.audioMode = RuntimeSettings.Cycle(v.audioMode, d); Changed(); });
+        AddStepper(r4, "Spark look", SparkLabel(v.sparkVariant),
+            d => { v.sparkVariant = RuntimeSettings.Cycle(v.sparkVariant, d); Changed(); });
+
+        var r5 = AddSettingsRow();
+        AddStepper(r5, "Tutorial", v.tutorial ? "On" : "Off",
+            d => { v.tutorial = !v.tutorial; Changed(); });
+        var pad = AddText(r5, "", 24, TextAlignmentOptions.Left).GetComponent<LayoutElement>();   // empty right half
+        pad.flexibleWidth = 1f; pad.minWidth = 150f + 60f + 190f + 60f + 30f;
+
+        var nav = AddRow(64, 40);
+        AddButtonTo(nav, "Reset to defaults", () => { RuntimeSettings.ResetToDefaults(); Render(SessionPhase.Idle); }, false, true);
+        AddButtonTo(nav, "Done", () => { _settingsOpen = false; Render(SessionPhase.Idle); }, false, true);
+    }
+
+    private RectTransform AddSettingsRow()
+    {
+        var row = AddRow(60, 10);
+        row.GetComponent<HorizontalLayoutGroup>().childForceExpandWidth = false;
+        return row;
+    }
+
+    // label (flexible) | < | value | >
+    private void AddStepper(RectTransform row, string label, string value, System.Action<int> onStep)
+    {
+        var l = AddText(row, label, 24, TextAlignmentOptions.Right);
+        var le = l.GetComponent<LayoutElement>(); le.flexibleWidth = 1f; le.minWidth = 150f;
+        Fixed(AddButtonTo(row, "<", () => onStep(-1), false, true).GetComponent<LayoutElement>(), 60f);
+        var t = AddText(row, $"<b>{value}</b>", 24, TextAlignmentOptions.Center);
+        Fixed(t.GetComponent<LayoutElement>(), 190f);
+        Fixed(AddButtonTo(row, ">", () => onStep(+1), false, true).GetComponent<LayoutElement>(), 60f);
+    }
+
+    private static void Fixed(LayoutElement le, float w) { le.flexibleWidth = 0f; le.minWidth = w; le.preferredWidth = w; }
+
+    private static string OrderLabel(ConditionOrderMode m)
+    {
+        switch (m)
+        {
+            case ConditionOrderMode.LatinSquare: return "Latin square";
+            case ConditionOrderMode.RandomExceptControlFirst: return "Control first";
+            case ConditionOrderMode.Random: return "Random";
+            default: return "Fixed";
+        }
+    }
+
+    private static string SparkLabel(SemanticVisualVariant v)
+    {
+        switch (v)
+        {
+            case SemanticVisualVariant.SparkOrb: return "B: orb";
+            case SemanticVisualVariant.SparkStarGlow: return "C: star+glow";
+            default: return "A: star";
         }
     }
 
@@ -445,7 +531,7 @@ public class SessionUI : MonoBehaviour
         AddText(row, text, size, align);
     }
 
-    private void AddText(RectTransform parent, string text, float size, TextAlignmentOptions align)
+    private TextMeshProUGUI AddText(RectTransform parent, string text, float size, TextAlignmentOptions align)
     {
         var go = new GameObject("Text", typeof(RectTransform));
         go.transform.SetParent(parent, false);
@@ -458,6 +544,7 @@ public class SessionUI : MonoBehaviour
         t.raycastTarget = false;
         var le = go.AddComponent<LayoutElement>();
         le.flexibleWidth = 1f;
+        return t;
     }
 
     // =====================================================================

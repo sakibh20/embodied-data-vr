@@ -42,15 +42,25 @@ public class SessionBootstrap : MonoBehaviour
         if (audioModeSelector == null) audioModeSelector = FindAnyObjectByType<AudioModeSelector>();
         if (session == null) session = FindAnyObjectByType<SessionController>();
 
+        // M64: work on a runtime copy so in-app setting changes never edit the asset on disk.
+        if (settings != null) settings = Instantiate(settings);
         StudyConfig.Settings = settings;
 
         RunType mode = settings != null ? settings.runType : RunType.Desktop;
+#if UNITY_ANDROID && !UNITY_EDITOR
+        // M63: the standalone Quest build is always VR, whatever the editor setting says.
+        mode = RunType.VR;
+#endif
         ApplyRunType(mode);
 
         if (audioModeSelector != null)
             audioModeSelector.SetMode(settings != null
                 ? settings.audioMode
                 : CueAudioController.AudioMode.Both);
+
+        // M64: researcher settings saved on this device override the asset defaults.
+        RuntimeSettings.Init(settings, FindAnyObjectByType<GraphManager>(),
+                             FindAnyObjectByType<ExperimentArea>(), audioModeSelector);
     }
 
     private void Start()

@@ -88,6 +88,8 @@ public class RunSettings : ScriptableObject
              "instructions screen, these trials in this order (full trial flow, logged to " +
              "practice_*.csv, no questionnaire), then a 'tutorial complete' screen. Empty = no tutorial.")]
     public List<TutorialTrial> tutorialTrials = new List<TutorialTrial>();
+    [Tooltip("M64: off = skip the instructions screen and practice trials (also switchable in the app).")]
+    public bool tutorialEnabled = true;
     public string instructionsTitle = "Welcome";
     [TextArea(6, 16)]
     public string instructionsText =

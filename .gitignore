@@ -62,3 +62,9 @@ __pycache__/
 *.pyc
 # Analysis output written next to the data
 Analysis/output/
+
+# Study data copied off the Quest (participant data -- never commit)
+QuestData/
+
+# Android (Gradle/CMake) build temp folder created by Unity Android builds
+.utmp/

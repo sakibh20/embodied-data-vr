@@ -25,6 +25,10 @@ public class ExperimentArea : MonoBehaviour
     [SerializeField] private float markerDepth = 0.6f;
 
     public float MarkerGap => markerGap;
+
+    /// <summary>M64: runtime size/gap from the in-app settings (next graph/session uses them).</summary>
+    public void SetSize(Vector2 newSize) => size = new Vector2(Mathf.Max(0.5f, newSize.x), Mathf.Max(0.5f, newSize.y));
+    public void SetMarkerGap(float gap) => markerGap = Mathf.Max(0f, gap);
     public float MarkerDepth => markerDepth;
 
     // Layout along the walk axis (area frame z, from the centre):
