@@ -40,6 +40,8 @@ public class PathSampler : MonoBehaviour
     /// GraphManager/EndpointMarkers can size the floor Start/End markers to match the
     /// actual walkable zone rather than an arbitrary constant. See ROADMAP.md M40.</summary>
     public float RegionHalfWidth => regionHalfWidth;
+    /// <summary>M68: follow the area width from the in-app settings.</summary>
+    public void SetRegionHalfWidth(float halfWidth) => regionHalfWidth = Mathf.Max(0.25f, halfWidth);
 
     /// <summary>Slack margin beyond each end still counted as "on the walk" (see
     /// regionMargin) -- exposed for the same reason as RegionHalfWidth. See ROADMAP.md M40.</summary>

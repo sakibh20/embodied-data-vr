@@ -368,7 +368,7 @@ public class SessionUI : MonoBehaviour
                           (RuntimeSettings.HasSavedChanges ? "" : "  <size=80%>(currently the defaults)</size>");
         if (v == null) return;
 
-        void Changed() { RuntimeSettings.Save(); Render(SessionPhase.Idle); }
+        void Changed() { RuntimeSettings.Save(); RuntimeSettings.RefreshLayoutPreview(); Render(SessionPhase.Idle); }
 
         var r1 = AddSettingsRow();
         AddStepper(r1, "Walk length", $"{v.walkLength:0.0} m",
@@ -424,7 +424,7 @@ public class SessionUI : MonoBehaviour
             .GetComponent<LayoutElement>().flexibleWidth = 0.5f;
 
         var nav = AddRow(64, 40);
-        Secondary(AddButtonTo(nav, "Reset to defaults", () => { RuntimeSettings.ResetToDefaults(); Render(SessionPhase.Idle); }, false, true));
+        Secondary(AddButtonTo(nav, "Reset to defaults", () => { RuntimeSettings.ResetToDefaults(); RuntimeSettings.RefreshLayoutPreview(); Render(SessionPhase.Idle); }, false, true));
         Cta(AddButtonTo(nav, "Done", () => { _settingsOpen = false; _clearResult = ""; Render(SessionPhase.Idle); }, false, true));
     }
 

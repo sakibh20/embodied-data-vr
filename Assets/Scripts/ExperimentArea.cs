@@ -27,8 +27,28 @@ public class ExperimentArea : MonoBehaviour
     public float MarkerGap => markerGap;
 
     /// <summary>M64: runtime size/gap from the in-app settings (next graph/session uses them).</summary>
-    public void SetSize(Vector2 newSize) => size = new Vector2(Mathf.Max(0.5f, newSize.x), Mathf.Max(0.5f, newSize.y));
-    public void SetMarkerGap(float gap) => markerGap = Mathf.Max(0f, gap);
+    /// M68: the Start spot (where the participant stands) stays put; the area grows or
+    /// shrinks forward from it, instead of around its centre (which moved the Start
+    /// marker away from the participant and could leave the graph off the marked area).
+    public void SetSize(Vector2 newSize)
+    {
+        Vector3 spot = ParticipantSpot;
+        size = new Vector2(Mathf.Max(0.5f, newSize.x), Mathf.Max(0.5f, newSize.y));
+        KeepParticipantSpot(spot);
+    }
+
+    public void SetMarkerGap(float gap)
+    {
+        Vector3 spot = ParticipantSpot;
+        markerGap = Mathf.Max(0f, gap);
+        KeepParticipantSpot(spot);
+    }
+
+    private void KeepParticipantSpot(Vector3 spot)
+    {
+        Vector3 c = spot + Forward * (NearZoneEdge + markerDepth * 0.5f);
+        transform.position = new Vector3(c.x, transform.position.y, c.z);
+    }
     public float MarkerDepth => markerDepth;
 
     // Layout along the walk axis (area frame z, from the centre):

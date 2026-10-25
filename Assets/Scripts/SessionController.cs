@@ -567,6 +567,7 @@ private void Awake()
         if (experimentArea == null || head == null) return;
 
         experimentArea.AlignToParticipant(head);
+        if (graphManager != null && graphManager.IsPreviewingArea) graphManager.PreviewAreaMarkers();   // M68
         Debug.Log($"[Session] Area aligned to participant: head {head.position}, " +
                   $"area centre {experimentArea.Center}, walk dir {experimentArea.Forward}.");
     }

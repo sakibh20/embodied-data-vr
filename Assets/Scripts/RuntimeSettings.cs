@@ -90,6 +90,15 @@ public static class RuntimeSettings
         if (_audio != null) _audio.SetMode(v.audioMode);
     }
 
+    /// <summary>M68: after a settings change on the start screen, take the old graph off
+    /// the floor and show the Start/End markers for the new layout straight away.</summary>
+    public static void RefreshLayoutPreview()
+    {
+        if (_graph == null) return;
+        _graph.ClearGraph();
+        _graph.PreviewAreaMarkers();
+    }
+
     /// <summary>Apply and save on this device.</summary>
     public static void Save()
     {

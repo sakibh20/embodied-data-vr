@@ -67,6 +67,25 @@ public class GraphManager : MonoBehaviour
     //     GenerateGraph();
     // }
 
+    // M68: lateral (value-axis) fit. The graph is scaled uniformly so its walk spans
+    // targetWalkLength, which also widened the value axis with the walk length (a 6 m
+    // walk doubled the sideways spread) and pushed the graph outside the area. The
+    // value axis is now squeezed, when needed, so the data range fits inside the
+    // area's width minus lateralMargin on each side. 1 = unchanged.
+    [SerializeField] private float lateralMargin = 0.4f;
+    private float _valueFit = 1f;
+    private float ValueScale => settings.heightScale * _valueFit;
+
+    private float ComputeValueFit(float graphScale)
+    {
+        if (graphData == null || graphData.values.Count == 0 || area == null) return 1f;
+        float minV = graphData.values[0], maxV = graphData.values[0];
+        foreach (var v in graphData.values) { if (v < minV) minV = v; if (v > maxV) maxV = v; }
+        float spread = (maxV - minV) * settings.heightScale * Mathf.Max(1e-6f, graphScale);
+        float usable = Mathf.Max(0.5f, area.Width - 2f * lateralMargin);
+        return spread > usable ? usable / spread : 1f;
+    }
+
     public bool IsGenerating => _isGenerating;
     public GraphData Data => graphData;
 
@@ -127,9 +146,35 @@ public class GraphManager : MonoBehaviour
         Generate();
     }
 
+    /// <summary>M68: remove the current graph, grid and Start/End markers (e.g. after
+    /// the researcher changes the layout in the settings, so nothing stale stays on
+    /// the floor).</summary>
+    public void ClearGraph()
+    {
+        if (_isGenerating) return;
+        if (pathSampler != null) pathSampler.Clear();
+        ResetGraph();
+        if (gridGenerator != null) gridGenerator.Clear();
+    }
+
+    /// <summary>M68: show only the Start/End markers for the current area layout, so the
+    /// researcher can see the new walk length/width on the floor right away.</summary>
+    public bool IsPreviewingArea { get; private set; }
+
+    public void PreviewAreaMarkers()
+    {
+        IsPreviewingArea = true;
+        if (area == null) area = FindAnyObjectByType<ExperimentArea>();
+        if (area == null) return;
+        if (_endpointMarkers == null) _endpointMarkers = gameObject.AddComponent<EndpointMarkers>();
+        _endpointMarkers.Show(area.StartMarkerInnerEdge, area.EndMarkerInnerEdge, area.Forward,
+                              area.Width * 0.5f, area.MarkerDepth * 0.5f);
+    }
+
     // RESET BEFORE REGEN
     private void ResetGraph()
     {
+        IsPreviewingArea = false;
         foreach (var dot in _spawnedDots)
         {
             if (dot != null) Destroy(dot.gameObject);
@@ -168,6 +213,7 @@ public class GraphManager : MonoBehaviour
         }
 
         if (area == null) area = FindAnyObjectByType<ExperimentArea>();
+        _valueFit = ComputeValueFit(FinalScale());
 
         if (!animateBuild)
         {
@@ -191,7 +237,7 @@ public class GraphManager : MonoBehaviour
         {
             float value = graphData.values[i];
 
-            Vector3 localPos = new Vector3(i * settings.spacing, value * settings.heightScale, 0);
+            Vector3 localPos = new Vector3(i * settings.spacing, value * ValueScale, 0);
 
             positions[i] = localPos;
 
@@ -211,6 +257,7 @@ public class GraphManager : MonoBehaviour
 
         _generationSequence.OnComplete(() =>
         {
+            SetLabelHeight();
             foreach (DataPoint point in _spawnedDots)
             {
                 point.Show();
@@ -220,7 +267,7 @@ public class GraphManager : MonoBehaviour
             if (gridGenerator != null)
             {
                 // Pass graphRoot so the grid shares the graph's alignment (rotate + flip).
-                gridGenerator.GenerateGrid(graphData, settings, graphRoot);
+                gridGenerator.GenerateGrid(graphData, settings, graphRoot, ValueScale);
             }
 
             // _isGenerating no longer clears here: StartAlignment() (called just above,
@@ -251,7 +298,7 @@ public class GraphManager : MonoBehaviour
         float minV = graphData.values[0], maxV = graphData.values[0];
         foreach (var v in graphData.values) { if (v < minV) minV = v; if (v > maxV) maxV = v; }
         Vector3 localCentre = new Vector3(Mathf.Max(0, n - 1) * settings.spacing * 0.5f,
-                                          (minV + maxV) * 0.5f * settings.heightScale, 0f);
+                                          (minV + maxV) * 0.5f * ValueScale, 0f);
         Vector3 centreTarget = area != null ? area.Center : graphRoot.position;
 
         graphRoot.localScale = Vector3.one * sc;
@@ -264,7 +311,7 @@ public class GraphManager : MonoBehaviour
 
         for (int i = 0; i < n; i++)
         {
-            Vector3 localPos = new Vector3(i * settings.spacing, graphData.values[i] * settings.heightScale, 0f);
+            Vector3 localPos = new Vector3(i * settings.spacing, graphData.values[i] * ValueScale, 0f);
 
             DataPoint dot = Instantiate(dataPoint, graphRoot);
             dot.Init(i, graphData);
@@ -276,10 +323,11 @@ public class GraphManager : MonoBehaviour
             _groundLineRenderer.SetPosition(i, new Vector3(localPos.x, 0f, 0f));
         }
 
+        SetLabelHeight();
         foreach (DataPoint point in _spawnedDots) point.Show();
 
         if (gridGenerator != null)
-            gridGenerator.GenerateGrid(graphData, settings, graphRoot);
+            gridGenerator.GenerateGrid(graphData, settings, graphRoot, ValueScale);
 
         FinishGeneration();
     }
@@ -348,6 +396,15 @@ public class GraphManager : MonoBehaviour
     }
 
     // Final graph scale: the walk (local X span of the points) becomes targetWalkLength.
+    // M67: world height (m) of one floor value label, from the gap between points
+    // along the walk, so neighbouring labels never overlap.
+    private void SetLabelHeight()
+    {
+        int n = graphData != null ? graphData.values.Count : 0;
+        float gap = n > 1 ? targetWalkLength / (n - 1) : 0.2f;
+        DataPoint.LabelHeight = Mathf.Clamp(gap * 0.7f, 0.05f, 0.12f);
+    }
+
     private float FinalScale()
     {
         int n = graphData != null ? graphData.values.Count : 0;
@@ -509,6 +566,7 @@ private void ConfigureSampler()
         var dotPositions = new List<Vector3>(_spawnedDots.Count);
         foreach (var dot in _spawnedDots) dotPositions.Add(dot.transform.position);
 
+        if (area != null) pathSampler.SetRegionHalfWidth(area.Width * 0.5f);   // M68
         pathSampler.Configure(start, walkDir, segment, graphData.values, dotPositions);
 
         PlaceEndpointMarkers(walkDir);

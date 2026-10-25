@@ -19,11 +19,14 @@ public class GridGenerator : MonoBehaviour
     [SerializeField] private Transform gridRoot;
 
     private Material _lineMaterial;
+    private float _valueScale = -1f;   // M68: local units per data value (<0: settings.heightScale)
 
-    public void GenerateGrid(GraphData data, GraphSettings settings, Transform alignmentParent = null)
+    public void GenerateGrid(GraphData data, GraphSettings settings, Transform alignmentParent = null,
+                             float valueScale = -1f)
     {
         graphData = data;
         graphSettings = settings;
+        _valueScale = valueScale;
 
         // Parent the grid under the same root as the graph so it inherits the
         // graph's alignment (the rotate + flip in GraphManager.StartAlignment).
@@ -75,12 +78,14 @@ public class GridGenerator : MonoBehaviour
         // Size the cross-lines to the graph's actual value spread so they always
         // span the whole graph (value maps to local Y = value * heightScale).
         int n = graphData.values.Count;
-        float hs = graphSettings.heightScale;
+        float hs = _valueScale > 0f ? _valueScale : graphSettings.heightScale;
         float minV = float.MaxValue, maxV = float.MinValue;
         foreach (var v in graphData.values) { if (v < minV) minV = v; if (v > maxV) maxV = v; }
 
-        float yLo = Mathf.Min(0f, minV * hs) - laneHalfWidth;   // laneHalfWidth = padding
-        float yHi = Mathf.Max(0f, maxV * hs) + laneHalfWidth;
+        // M68: span the data's own range (plus padding), not 0..max -- spanning from
+        // value 0 made the cross lines run far outside the area for data far from 0.
+        float yLo = minV * hs - laneHalfWidth;   // laneHalfWidth = padding
+        float yHi = maxV * hs + laneHalfWidth;
         float walkLen = Mathf.Max(0, n - 1) * graphSettings.spacing;
 
         // Cross line at each data point, spanning the value axis (local Y). Lies in the
@@ -119,6 +124,8 @@ public class GridGenerator : MonoBehaviour
         lr.SetPosition(1, end);
         lr.useWorldSpace = false;
     }
+
+    public void Clear() => ClearGrid();
 
     private void ClearGrid()
     {
