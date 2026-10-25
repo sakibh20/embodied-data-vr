@@ -1,49 +1,32 @@
-# Grid System Setup Guide
+# Floor grid
 
-## Overview
-The grid system displays guidance lines on the ground synchronized with your graph data points. It helps visualize the spacing between data points that the user will walk.
+> Last updated: 2026-10-25 (M68). Already set up in `Experiment.unity`: the `Grid`
+> object has a `GridGenerator`, wired into `GraphManager`'s Grid Generator slot.
 
-## Integration
+## What it draws
 
-### In Your Scene (Experiment.unity or any scene)
+Built by `GraphManager` every time a graph is generated, as children of the graph root,
+so it lies on the floor with the graph and scales with it:
 
-1. **Add Grid GameObject**
-   - Right-click in hierarchy → 3D Object → Create Empty
-   - Name it "Grid"
-   - Position it at (0, 0, 0) or wherever your graph is
+- **One cross line per data point**, across the value (sideways) axis, spanning the
+  data's own value range plus `laneHalfWidth` of padding at each end (1 local unit, ≈0.2 m on the default 3 m walk)
+  (M68: previously it ran from value 0 to the maximum, which put lines far outside the
+  area for data far from 0). These mark where each point is along the walk.
+- **A baseline** along the walk at value 0.
 
-2. **Add GridGenerator Component**
-   - Select the Grid object
-   - Add Component → GridGenerator
+The grid uses the same value scale as the graph (including the sideways fit to the area
+width, M68), so the cross lines always line up with the dots. It stays visible during
+Retrace as a pacing guide while the line, dots and labels are hidden.
 
-3. **Wire GraphManager**
-   - Select GraphManager in the scene
-   - In the Inspector, find the empty "Grid Generator" slot
-   - Drag the Grid object (or its GridGenerator component) into it
+## Settings (GridGenerator component)
 
-### Result
-When you press "GenerateGraph" (ContextMenu on GraphManager), it will:
-1. Generate the graph dots and lines
-2. Automatically generate the synchronized grid after animation completes
-
-## Grid Customization
-
-In the GridGenerator component:
-- **Line Width**: Thickness of grid lines (default 0.02)
-- **Line Color**: Color of grid lines (default gray)
-- **Line Alpha**: Transparency (0-1, default 0.5)
-
-## How It Works
-
-- Grid width = number of data points in your GraphData
-- Grid spacing = GraphSettings.spacing value
-- Grid aligns perfectly with data point positions
-- Vertical lines mark each data point location
-- Horizontal reference line at Z=0 for orientation
+- **Line Width** 0.02, **Line Color** grey, **Line Alpha** 0.5.
+- **Lane Half Width** 1 (scene value; graph-local units) — padding beyond the value range.
+- Spacing comes from `GraphSettings.spacing`; the graph's uniform scale sets the real
+  distance (walk length / (points − 1)).
 
 ## Notes
 
-- Grid is generated as child objects of the Grid GameObject (GridLine prefabs)
-- Each call to GenerateGraph clears old grid and creates new one
-- Grid uses shared material for efficiency
-- Works with any GraphSettings and GraphData configuration
+- Each graph generation clears the old grid and builds a new one; changing settings on
+  the start screen clears it too (M68).
+- The baseline is drawn at value 0, which can lie outside the area for data far from 0.

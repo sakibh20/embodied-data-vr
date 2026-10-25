@@ -1,516 +1,378 @@
 # Embodied-Data-VR — Project Description
 
-> Living document. Update it whenever the project changes (new scripts, renamed
-> objects, changed constants, new conditions, etc.). Companion files:
-> `ROADMAP.md` (milestones/status), `HOW_TO_RUN.md` (run steps),
-> `XR_MODE_SWITCHING.md` (desktop / headset).
-> Last updated: 2026-10-03 (M46).
+> Living document describing the system **as it is now**. Development history (why
+> things are the way they are, bugs found and fixed) is in `ROADMAP.md`, milestone by
+> milestone (Mxx numbers below point there). Companion files: `HOW_TO_RUN.md` (running
+> sessions, building for the Quest, copying data), `XR_MODE_SWITCHING.md` (desktop vs
+> headset), `GRID_SETUP.md` (floor grid).
+> Last updated: 2026-10-25 (through M68).
+
+Study title used with participants: **"Audio and visual cues for remembering data in
+virtual reality"** (Tampere University MSc thesis). Unity 6000.3.10f1, URP, OpenXR,
+runs standalone on a **Meta Quest 2** (Android build, M63); the same scene also runs on
+the desktop for development.
 
 ---
 
 ## 1. What the study is
 
-A within-subjects VR experiment on **embodied data physicalisation**: participants
-"walk" a line graph laid flat on the floor (time on the walk axis, value as lateral
-offset/height), then reconstruct it from memory. We test whether adding sensory
-**cues** (a visual density field + sonified value) and whether those cues are
-**semantically representative** vs generic changes how well people remember the data.
+A within-subjects VR experiment on **embodied data**: participants physically walk a
+line graph laid flat on the floor (time = the walk direction, value = sideways position
+on the floor), then walk the shape again from memory and answer questions about the
+values. The independent variable is the **cue condition**: whether sound and objects
+around the participant change with the value under their feet, and whether those cues
+are **semantically related to the data** (electricity: an electric zap sound, yellow
+spark objects) or **generic** (a beep, plain spheres).
 
-### The five conditions (`ConditionId` in `StudyTypes`/`ConditionBase.cs`)
+### 1.1 Conditions (`ConditionId`, `ConditionBase.cs`; scene objects `Condition_*`)
 
-| id | enum name        | scene object              | visual cue | audio cue | audio reacts to walk? | meaning |
-|----|------------------|---------------------------|------------|-----------|-----------------------|---------|
-| 0  | `Control`        | `Condition_Control`       | none       | none      | —                     | embodied baseline: graph + grid only |
-| 1  | `Abstract`       | `Condition_Abstract`      | sphere (`DensityObject`) | beep | yes | generic audio + generic visual |
-| 2  | `Representative` | `Condition_Representative`| yellow spark star (`SparkObject`) | electric zap | yes | representative audio + representative visual |
-| 3  | `SemanticAudio`  | `Condition_SemanticAudio` | sphere (`DensityObject`) | electric zap | yes | representative audio + generic visual |
-| 4  | `SemanticVisual` | `Condition_SemanticVisual`| yellow spark star (`SparkObject`) | beep | yes | representative visual + generic audio |
+| id | name | visual cue | audio cue | audio_cue / visual_cue (CSV) | supervisor code |
+|----|------|-----------|-----------|------------------------------|-----------------|
+| 0 | `Control` | none | none | none / none | c5 |
+| 1 | `Abstract` | plain spheres | beep | plain / plain | c2 |
+| 2 | `Representative` | yellow sparks | electric zap | semantic / semantic | c1 |
+| 3 | `SemanticAudio` | plain spheres | electric zap | semantic / plain | c3 |
+| 4 | `SemanticVisual` | yellow sparks | beep | plain / semantic | c4 |
+| 5 | `Tutorial` | blue electric orbs | earlier electric sound | — | practice only |
 
-> M47: a clean 2×2 (audio semantic/plain × visual semantic/plain) + Control, matching the
-> supervisor's data-notes doc (its c1..c5 = Representative, Abstract, SemanticAudio,
-> SemanticVisual, Control) and the CSV `audio_cue`/`visual_cue` labels. All four cue
-> conditions track the data. The objects were renamed from `Condition_MismatchStatic`/
-> `Condition_MismatchNonRep`, and `SemanticAudio` no longer plays a static hum
-> (`respondToValue` is now true; it was false before M47).
+Conditions 1–4 form a 2×2 (audio semantic/plain × visual semantic/plain) plus the
+Control baseline (M47). All four cue conditions follow the data in the same way; only
+the sound clip and the object look differ. `Tutorial` is used only in the second
+practice trial and never appears in the experiment order (M60).
 
-### The phases per trial (`SessionPhase`)
+### 1.2 The data
 
-`Walk` → `Distractor` → `Retrace` → `RetraceReview` → `Recall` → `TrialComplete`, repeated
-for every trial, then `Complete`.
-
-- **Walk** — participant walks the graph; cues play; the graph line/dots are visible.
-- **Distractor** — count backwards from a random number (300–999) in 3s (working-memory wipe).
-- **Retrace** — graph hidden (grid stays); since M53 the trial's **audio + visual cues stay
-  on** exactly as in Walk (supervisor), following where the participant stands
-  (StandingPosition feedback, so they reveal nothing the participant isn't already doing).
-  Previously forced to `Control`. Participant re-walks the shape from memory; their floor
-  path is sampled. Cues run ONLY in Walk and Retrace (`SessionController.SetPhase` gates
-  `WalkValueDriver`), never during Distractor, review, Recall or between trials. Nothing is drawn from this data while
-  they're still walking — Retrace stays a pure memory test.
-- **RetraceReview** (M44) — once Retrace ends, `GraphManager.ShowRetraceGraph` draws the
-  path the participant just walked as a dot+line graph, in the *same* visual style as the
-  real graph (same prefab, same line look, same point count as the dataset) — so it's
-  directly comparable to what they saw during Walk, at a glance, right after they finish
-  retracing rather than during it. Held for `SessionController.retraceReviewSeconds`
-  (default 5s) — either the timer or a debug-key press calls `EndRetraceReview`, which
-  clears the review graph (`GraphManager.ClearRetraceGraph`) and moves on to Recall.
-  Resampling skips the leading part of `retracePath` where the participant is still
-  standing at the far end / walking back to the start (M45) — it only draws their real,
-  final attempt at the corridor, anchored on the last time they were nearest the start.
-- **Recall** — 4 multiple-choice questions about the data.
-- **TrialComplete** (M39) — the last question has been answered and the trial's CSV row is
-  already written, but the *next* trial's graph does not start generating yet: the
-  participant must walk back near the **Start** floor marker (`SessionController.
-  CheckReadyToStartNext`) before `SessionUI` offers a "Start Next Trial" button
-  (`SessionController.StartNextTrial`). Keeps the next graph from forming around the
-  participant while they're still standing at the far end of the previous corridor.
-
-(M56) Layout along the walk: **Start marker | safe gap | graph zone | safe gap | End marker** (`ExperimentArea.markerGap` 0.4 m, `markerDepth` 0.6 m). Walk/Retrace are armed only once the participant stands on the Start marker in that phase -- cues and retrace logging start then -- and end when they reach the End marker; the gaps are silent transition buffers.
-
-Floor **Start**/**End** markers (a coloured rectangle + `TextMeshPro` label lying flat
-on the ground, `EndpointMarkers.cs`, M39/M40) mark both ends of the current trial's walk
-corridor — placed once `GraphManager` finishes generating/aligning, and left in place
-through Walk/Distractor/Retrace/TrialComplete (they're what "walk back to the start"
-above actually means physically). Pure world-space geometry, so it needs no VR-specific
-handling — same reason the floor graph itself works across desktop/VR.
-Anchored on **`ExperimentArea`** — the room-area rectangle, i.e. the cyan square you
-see as its Scene-view gizmo (`ExperimentArea.OnDrawGizmos`) — not on the graph or
-`PathSampler` at all (M43). Width = `area.Width`, centred on `area.Center`, positioned
-outside the area's own near/far edge (`area.Depth / 2` from its centre). Three earlier
-attempts anchored on the graph instead and all looked subtly wrong for the same
-underlying reason (the graph's own extent/centroid isn't the same rectangle as the
-room area): M40 anchored on the value=0 baseline (only matches the corridor's
-centreline when a dataset is 0 at that end); M41 fixed the "straddling the graph"
-overlap but still anchored on dot0/dotN; M42 made both markers mutually consistent
-(anchored purely on dot0, matching `PathSampler`'s own single-reference corridor
-model) but that still isn't the same rectangle as `ExperimentArea`, since the graph is
-centred on the area using the *centroid* of every point's value, not dot0 specifically.
-`PathSampler.RegionMargin` is still used for the marker's own thickness (how far
-outside the zone it sits) — that part was never what was broken.
-
-### What is measured (written incrementally to CSV — see §6)
-
-Per trial: condition, dataset, phase durations, distractor start number
-(`trials.csv`), the **retrace path** (world x/y/z samples over time,
-`retracing_log.csv`), and the **recall questions** with the chosen answer
-(`value_questions.csv` → recall score). See §6 and `Analysis/analyze_study.py`.
-The retrace path is also what `RetraceReview` (M44, above) draws back on the floor
-right after Retrace ends — same CSV data, just visualised once for the participant
-before Recall, not a separate capture.
-Test/pilot CSV data can be permanently cleared from the Unity Editor menu
-**Tools > Study Data** (see HOW_TO_RUN §7) -- an Editor-only action, not part of
-the in-VR runtime UI.
+- 30 real datasets from the UCI "Individual household electric power consumption" data
+  (daily mean energy use, kWh; days with more than 60 min missing removed), selected by
+  the supervisor: `Sources/selected_30_datasets.csv`, 30 days each, dataset ids 1–43
+  with gaps. Imported as `Assets/Data/UCI/Energy_dNN.asset` (NN = CSV id), point labels
+  "Day 1" … "Day 30", unit kWh (M60).
+- **Tutorial:** Energy_d43 (practice 1, Control) and Energy_d37 (practice 2, Tutorial
+  cues), the same for every participant.
+- **Experiment pool:** the other **28** datasets (`SessionController.datasetPool`).
+  Each participant does 25 trials, so nobody sees a dataset twice.
 
 ---
 
-## 2. Where things are
+## 2. Session flow (what a participant goes through)
+
+Before the headset: the participant reads the **information sheet** and **privacy
+notice** on paper (`../Privacy Notice/`). Then, in VR:
+
+1. **Start screen (researcher)** — participant number (auto-suggested, − / +; red
+   warning if that number already has data), **Settings**, **Start Session**, and a
+   one-line summary of the active settings. Start Session re-anchors the experiment
+   area to where the participant is standing and facing (§3.1).
+2. **Consent** — "Consent to take part in the study", the study name, five statements
+   (read the sheet and notice, 18+, voluntary, data labelled only with a code and not
+   removable afterwards, use in thesis/publications/later research), a tick box
+   "I agree to take part in this study." and **Continue**. Unticked → "I do not
+   consent", a thank-you message, back to the start screen (M61).
+3. **Background questions** ("About you") — VR experience (at least every day / once a
+   week / once a month / once a year / once in the last 5 years / never) and age range
+   (18–24, 25–29, …, 50–54, 55–60).
+4. **Welcome / instructions** screen (text on `RunSettings.instructionsText`) →
+   "Start the tutorial".
+5. **Tutorial: 2 practice trials** (full trial flow, not scored, no questionnaire):
+   Practice 1/2 = Control on d43, Practice 2/2 = Tutorial cues on d37. Then
+   "Tutorial complete — You have now completed the tutorial. The experiment starts
+   next." (M60).
+6. **Experiment: 25 trials in 5 blocks** — one block per condition, 5 trials each, back
+   to back (`trialsPerCondition = 5`, M59/M61). Block order from a balanced Latin square
+   (§5).
+   - After **every** trial: recall questions (§2.2).
+   - After the **5th trial of each condition**: the post-condition questionnaire
+     (intro screen "About this part of the study", then 16 items, §2.3).
+7. **End screen** — "Thank you! You can now remove the headset. The researcher will
+   give you a laptop for four short open-ended questions." The four open-ended
+   questions are a Microsoft Form, outside the app.
+
+### 2.1 One trial (`SessionPhase`)
+
+`Walk → Distractor → Retrace → RetraceReview → Recall → (Questionnaire) → TrialComplete`
+
+| Phase | What happens | Panel |
+|-------|--------------|-------|
+| **Walk** | The graph (dots, line, value labels, grid) and the green Start / red End floor markers are shown. Cues and movement logging start once the participant stands on the **Start marker**; the phase ends when they reach the **End marker**. | hidden |
+| **Distractor** | "Count out loud backwards from *N* in steps of 3, until told to stop." (*N* random, 300–998); researcher/participant presses Done. Cues off. | shown |
+| **Retrace** | Graph line, dots and labels hidden (grid and markers stay). A short instruction says to walk back to the green Start marker and walk the shape again from memory. Logging and the trial's cues re-arm on the Start marker; ends at the End marker. Cues stay on as in Walk (M53) and follow where the participant stands, so they add nothing the participant isn't already doing. | brief instruction, then hidden |
+| **RetraceReview** | The path just walked is drawn on the floor as a dot+line graph in the same style (same point count) for 5 s, then cleared (M44; no panel since M59). | hidden |
+| **Recall** | Four questions (§2.2), one per screen. Not skippable. | shown |
+| **Questionnaire** | Only after a condition's 5th trial (§2.3). | shown |
+| **TrialComplete** | "Walk back to the Start marker"; once the participant is on it, a **Start Next Trial** button appears. The next graph is only built after that (M39). | shown |
+
+Cues run **only** in Walk and Retrace (`SessionController.SetPhase` →
+`WalkValueDriver.SetActive`), and only after the participant has stood on the Start
+marker in that phase (M56), so walking back to the start is neither cued nor logged.
+
+### 2.2 Recall questions (`SessionController.BuildQuestions`)
+
+1. "What was the highest value you encountered?" (`max_value`)
+2. "What was the lowest value you encountered?" (`min_value`)
+3. "What was the value at the end of the walk?" (`end_value`)
+4. "What was the difference between the highest and lowest points?" (`range_value`)
+
+- **Answer mode** (setting, default **number pad**): typed on an on-panel keypad (0–9,
+  ".", Delete; M58). Logged with `abs_error` = |answer − correct| and
+  `error_pct_of_range` = abs_error / (dataset max − min) × 100 (M62). `is_correct` =
+  equal at one decimal.
+- Alternative mode: **4 choices** — the correct value plus three distractors at
+  ±k·step, step = max(1, round(0.15 × range)), all ≥ 0; the correct slot is random but
+  reproducible (seeded by participant, trial and question).
+
+### 2.3 Post-condition questionnaire (`PostConditionQuestionnaire.asset`, M58)
+
+One item per screen; Back / Next / Finish; Next is disabled until answered.
+
+| Items | Instrument | Scale |
+|-------|-----------|-------|
+| SPES-SL1–SL4 | Spatial Presence Experience Scale, self-location | 1–5, "I do not agree at all" … "I fully agree" |
+| SPES-PA1, PA2, PA5, PA8 | SPES, possible actions ("dots" wording) | 1–5 |
+| CUE-V "I noticed the surroundings changing as I walked." | cue check | 1–5 |
+| CUE-A "I noticed the sound changing as I walked." | cue check | 1–5 |
+| TLX-1–6 (Mental, Physical, Temporal, Performance, Effort, Frustration) | NASA Raw TLX | 0–100 in steps of 5 (21 segments), "Very low" … "Very high"; Performance "Perfect" … "Failure" |
+
+Intro screen text: "You have finished this part of the study. Please answer the
+following questions about the walks you just completed. Point at your answer and press
+the trigger."
+
+---
+
+## 3. The virtual setup
+
+### 3.1 Experiment area and floor layout (`ExperimentArea`)
+
+Along the walk: **Start marker | gap | graph zone | gap | End marker** (M56).
+
+- Graph zone: width = **area width** (default 4 m), depth = **walk length + 1 m**
+  (default 3 + 1 = 4 m).
+- Gaps: **0.4 m** (marker gap setting) — silent transition buffers, outside the cue
+  region.
+- Start / End markers: green and red rectangles with a "Start"/"End" label lying on
+  the floor, as wide as the area and **0.6 m** deep (`EndpointMarkers.cs`).
+- Total footprint along the walk with defaults: 4 + 2 × (0.4 + 0.6) = **6.0 m**.
+- On **Start Session** the area is re-anchored to the participant (M51): its walk
+  direction = the way they face (yaw only), positioned so they stand in the middle of
+  the Start marker. Everything (graph, grid, markers, cue field) is laid out from it.
+  The researcher menu can re-centre it between trials.
+- When the walk length / width / gap are changed in Settings, the Start spot stays
+  where it is and the area grows or shrinks forward from it; the Start/End markers for
+  the new layout are shown on the floor immediately (M68).
+
+### 3.2 The graph (`GraphManager`, `GraphSettings`, `DataPoint`, `GridGenerator`)
+
+- Built directly in its final pose lying on the floor, in one frame (no build
+  animation; M53).
+- Point *i* is placed at local (i × spacing, value × heightScale) with spacing 0.5 and
+  heightScale 0.2, then the whole graph is scaled uniformly so the **first-to-last point
+  distance equals the walk length** (default **3 m**; 30 points → points 10.3 cm apart)
+  and centred on the area (centre of the value range on the area's centre line).
+- **Sideways fit (M68):** if the data's value range would come out wider than the area
+  width minus 0.4 m each side, the value axis is narrowed to fit. With the default 3 m
+  walk and 4 m area the 28+2 datasets spread 0.75–2.6 m sideways, so none is narrowed;
+  the widest dataset starts being narrowed above a ≈3.7 m walk (because the uniform
+  scale widens the graph along with the walk).
+- **Value labels (M67):** each point shows "Day *n* : *value* kWh" in bold white on a
+  solid dark plate, 2 cm above the floor and drawn on top of the line. Label height is
+  set in world units from the point spacing: 0.7 × spacing, clamped to 5–12 cm (≈7 cm on
+  a 3 m walk). Each label sits beside its dot on the side where the line is least in
+  the way (outside peaks and dips).
+- **Grid:** one grey cross line per point across the data's value range (plus padding)
+  and a baseline at value 0 (`GridGenerator`). The grid stays visible in Retrace as a
+  pacing guide.
+
+### 3.3 From position to cue value (`PathSampler`, `WalkValueDriver`)
+
+```
+head position (XR camera on the Quest, desktop camera in the editor)
+  → PathSampler.NormalizedPositionValueAt(pos)   // where the participant STANDS on the value axis
+  → WalkValueDriver (every frame; gates cues to the walk region)
+  → ConditionManager → active condition
+       → DensityController.UpdateDensity(v)      // number of objects
+       → CueAudioController.SetNormalizedValue(v) // pulse rate
+```
+
+- **Standing-position feedback (M46):** the value axis is the floor direction from the
+  lowest-value dot to the highest-value dot (walk component removed); the cue value is
+  where the participant stands along it, from 0 (on the minimum line) to 1 (on the
+  maximum line), clamped. Head height is ignored. Standing on a dot gives exactly that
+  dot's value.
+- **Per-dataset normalisation:** 0..1 always spans that dataset's own min–max, so cue
+  intensity covers the full range in every trial.
+- **Region gate:** cues are on only inside the graph zone along the walk (± 0.5 m past
+  the first/last point) and within the corridor sideways (half-width = max(area width/2,
+  half the value band); M68 ties it to the area width). Outside → silent, no objects.
+
+### 3.4 Visual cue (`DensityController`, shared `GraphSettings` "Cue Field")
+
+- Number of objects = round(lerp(**5, 100**, v)); random size 0.1–0.3 m; objects scale
+  in/out (0.3 s) rather than pop, float gently, no shadows, no colliders.
+- Spread in a 3D field: area footprint + **1.5 m** padding on each side, height
+  **0.3–2.8 m**; inside the walk zone objects only appear above **2.1 m**, so nothing
+  floats at body or face height on the walk (M48).
+- Looks: **plain** = soft pearl sphere (`SoftOrb`, no glow or colour temperature);
+  **semantic** = yellow spark, variant chosen in settings — default **C "star + glow"**
+  (pointy star mesh with a warm glow and spark rays; A = pointy star only, B = yellow
+  ball with streaks; M54/M55). Tutorial = blue electric orb (`ElectricOrb`).
+- Same count range and size for every cue condition; only the object look differs.
+
+### 3.5 Audio cue (`CueAudioController`, `AudioModeSelector`)
+
+- **Study setting: tempo only** (M57): pulses per second = lerp(**1, 8**, v); one pulse
+  every 1/pps s; every pulse plays the clip unchanged (playback speed 1.00 — tempo never
+  changes pitch). Measured rate within 0.4 % of the set rate.
+- Clips: semantic = Freesound #512471 "Electric zap" (CC0) cut to a 110 ms pulse
+  (`spark_zap_pulse.wav`); plain = `beep_matched.wav`; tutorial =
+  `electric3_matched.wav`. Loudness-matched (−10 LUFS) so neither sound is louder
+  (M53).
+- Click-free playback: voice pool, per-sample fade ramps (8 ms), baked fades.
+- Other modes (settings): pitch only (continuous loop, pitch 0.8–1.5) and both.
+
+### 3.6 Panel and interaction (`SessionUI`)
+
+- World-space panel **2.7 m** in front of the participant (yaw only), re-centred when
+  they look more than 55° away for 0.8 s. Hidden during Walk, Retrace and
+  RetraceReview.
+- Point with the controller ray and pull the trigger. Answer buttons are blue;
+  call-to-action buttons (Continue, Next, Start Next Trial, …) green; Back/Cancel grey;
+  destructive red (M66).
+- No controller locomotion: the participant can only move by walking (M49).
+
+---
+
+## 4. Researcher controls and settings
+
+### 4.1 Researcher menu (M66)
+
+Hold the **left controller's menu button for 1.5 s** (Esc in the editor) at any time:
+participant / phase / trial, Continue, **Skip this step** (Walk, counting, Retrace,
+review, instructions, between trials — not recall or questionnaires), **Re-centre area
+here** (between trials), **End session** (confirm; data so far is kept; back to the
+start screen with the next number), Settings (no session running), Close app. A red
+**End session** button is also pinned to the panel's top-right corner whenever the
+panel is visible during a session. Every such action is logged in
+`session_events.csv`.
+
+### 4.2 In-app settings (M64; stored on the device, applied at launch)
+
+| Setting | Default | Range |
+|---------|---------|-------|
+| Walk length | 3 m | 2–15 m (area depth follows: walk + 1 m) |
+| Area width | 4 m | 2–10 m |
+| Marker gap | 0.4 m | 0.1–1.5 m |
+| Trials per condition | 5 | 1–10 |
+| Condition order | Latin square | Fixed / Random / Control first / Latin square |
+| Recall answers | number pad | number pad / 4 choices |
+| Audio cue | tempo only | pitch / tempo / both |
+| Spark look | C: star + glow | A / B / C |
+| Tutorial | on | on / off |
+
+Plus **Study data**: participant and trial counts on the device and **Delete all
+data…** (red confirm screen; copy the data to the PC first). Defaults come from
+`RunSettings.asset` and the scene; the app works on a runtime copy, so the asset is
+never changed. Every value actually used is written to `session_info.csv`.
+
+---
+
+## 5. Order and counterbalancing (`SessionController.BuildTrials`)
+
+- **Condition order:** balanced (Williams) **Latin square**, 10 rows for 5 conditions,
+  row = (participant − 1) mod 10. Over every 10 participants each condition appears
+  twice in each position and each condition follows every other exactly twice (M47).
+  One order per participant; trials are **blocked** (all 5 trials of a condition back
+  to back, M59).
+- **Datasets:** the 28-dataset pool in a fixed order; participant *p* starts at
+  position (p − 1) mod 28 and takes the next dataset for every trial (wrapping round).
+  The dataset–condition pairing therefore varies between participants but is **not
+  explicitly balanced** (open question with the supervisor; options: keep and treat
+  dataset as a random effect, or fixed sets of 5 datasets rotated across conditions).
+- The tutorial trials always come first and are excluded from the order.
+
+---
+
+## 6. Data recorded
+
+Written incrementally as CSV to `<persistentDataPath>/StudyData/pNN/` (one folder per
+participant; on the Quest `/sdcard/Android/data/com.sakibhasan.embodieddataviz/files/StudyData`).
+Every row carries `session_id` (participant + local start time) so a reused number can
+never silently mix two runs (M62). Positions are in the **area frame**: x = sideways,
+z = along the walk, relative to the area centre; y = height.
+
+| File | One row per | Main columns |
+|------|-------------|--------------|
+| `session_info.csv` | session | run type, headset, Unity version, condition order mode + Latin-square row + order, trials per condition, practice/experiment counts, dataset pool size + order, audio mode, recall mode, spark variant, area width/depth, marker gap, sample interval, walk length |
+| `consent.csv` | consent answer | consent_version, response ("I consent" / "I do not consent"), timestamp, local time |
+| `background.csv` | background question | item_id, item_text, response (option text) |
+| `trials.csv` | trial | condition, audio_cue, visual_cue, presentation_order, trial_in_condition, dataset_id, start/end time, walk/distractor/retrace seconds, distractor start number, recall_score/total, walk/retrace sample counts |
+| `value_questions.csv` | recall question | question type/text, correct answer, response, abs_error, error_pct_of_range, is_correct, answer_mode |
+| `walking_log.csv` | movement sample in Walk (10 Hz, from the Start marker) | t_seconds, head_x/y/z, head_yaw_deg (relative to the walk direction), head_pitch_deg, cues_on, cue_value |
+| `retracing_log.csv` | movement sample in Retrace (same format) | as above |
+| `graph_points.csv` | graph point per trial | dot_index, day_label, value, x, z — the ground truth the retrace is compared with |
+| `questionnaires.csv` | questionnaire item | instrument, subscale, item_id, item_text, scale, response |
+| `session_events.csv` | researcher/session event | event (session_started, skip_step, recentre_area, session_ended_early, session_complete), phase, detail |
+
+Practice trials go to `practice_trials.csv`, `practice_value_questions.csv`,
+`practice_walking_log.csv`, `practice_retracing_log.csv`, `practice_graph_points.csv`,
+so analysis never mixes them in. Copy data off the Quest with
+`Tools/pull_quest_data.bat` / `.sh` (HOW_TO_RUN).
+
+---
+
+## 7. Analysis (`Analysis/analyze_study.py`, `Analysis/analysis_gui.py`)
+
+Reads every participant folder (CLI or the point-and-click GUI, same code). Outputs to
+`StudyData/analysis/`:
+
+- `analysis_trials.csv` — every trial with recall % and recall abs/percentage error,
+  and retrace accuracy against the real graph (`retrace_r_vs_graph`, `retrace_rmse_m`,
+  `retrace_rmse_value`, from `graph_points.csv`).
+- `analysis_conditions.csv` — per-condition means and SDs.
+- `analysis_questionnaires.csv` — per participant × condition: SPES self-location,
+  possible actions and overall means, cue checks, TLX items and Raw TLX (mean of 6).
+- `analysis_participant_condition.csv` — one row per participant × condition (trials
+  averaged) joined with the questionnaire scores: the input for the repeated-measures
+  statistics.
+- `analysis_participant_order.csv`, `summary.csv`, and optional per-trial plots of the
+  retrace against the real graph.
+
+---
+
+## 8. Where things are
 
 ```
 Assets/
-  Scenes/Experiment.unity      ← the study scene. Open it and press Play — SessionBootstrap
-                                   applies RunSettings and stops at the Idle screen (confirm/
-                                   adjust participant ID + audio mode, then Start Session) —
-                                   see `autoStartSession` on `SessionBootstrap` (M34) to go
-                                   back to auto-starting immediately for quick desktop debugging
-  Scripts/                     ← all study code (compiles into Assembly-CSharp)
-  ScriptableObjects/RunSettings.asset  ← audioMode + runType (Desktop/VR),
-                                   read by SessionBootstrap at startup
-  Data/…                       ← GraphData assets (Dataset_01..06), GraphSettings
-  Samples/XR Interaction Toolkit/3.3.1/…   ← Starter Assets rig (XR Interaction Simulator sample removed in M50)
-  XRI/Settings/…               ← XRI settings (simulator auto-instantiate off, no prefab)
-Analysis/
-  analyze_study.py             ← raw CSV -> analysis CSV pipeline (§6), reads every
-                                   participant subfolder under StudyData/
-  analysis_gui.py               ← point-and-click front end for analyze_study.py (§6, M35):
-                                   pick a folder, see the participants in it, Analyze All /
-                                   Analyze Selected
-  datasets.json                 ← exported dataset value profiles (for retrace proxy);
-                                   analyze_study.py defaults to this file automatically (M35)
-ROADMAP.md, HOW_TO_RUN.md, XR_MODE_SWITCHING.md, PROJECT_DESCRIPTION.md
+  Scenes/Experiment.unity          the only scene (also the only scene in the build)
+  Scripts/                         study code
+    SessionController.cs           session/trial flow, questions, all CSV writing
+    SessionUI.cs, SessionCanvasView.cs, SessionAnswerInput.cs   the panel
+    GraphManager.cs, DataPoint.cs, GridGenerator.cs, EndpointMarkers.cs   floor graph
+    ExperimentArea.cs, PathSampler.cs, WalkValueDriver.cs   layout + position → value
+    ConditionManager.cs, CueConditionController.cs, DensityController.cs,
+    CueAudioController.cs, AudioModeSelector.cs   conditions and cues
+    RunSettings.cs, RuntimeSettings.cs, SessionBootstrap.cs   settings + start-up
+    QuestionnaireDefinition.cs, ConsentDefinition.cs   questionnaire/consent assets
+    Dev/                           test helpers (simulated participant, UI screenshots)
+  ScriptableObjects/               RunSettings, ConsentForm, BackgroundQuestions,
+                                   PostConditionQuestionnaire
+  Data/UCI/Energy_dNN.asset        the 30 datasets
+  Scripts/GraphSettings.asset      graph spacing/heightScale/dot size + cue field
+Analysis/                          analyze_study.py, analysis_gui.py, datasets.json,
+                                   make_cue_clips.py (builds the matched audio clips)
+Tools/                             install_quest_build / pull_quest_data (.bat + .sh)
 ```
-
-### Key GameObjects in `Experiment.unity`
-
-| Object | Components | Role |
-|--------|-----------|------|
-| `SessionController` | `SessionController` | Orchestrates the whole session (trials, phases, logging). |
-| `ConditionManager` | `ConditionManager`, `AudioModeSelector`, `VolumeController` | Activates exactly one condition; routes the walk value to it; global audio mode + volume. |
-| `ExperimentController` | `ExperimentController` | Operator control surface (condition/audio/regenerate). Keyboard shortcuts **off** by default (would clash with SessionController debug keys). |
-| `GraphManager` | `GraphManager` | Builds/animates the graph, flat-lays + scales it, configures `PathSampler`, places the floor Start/End markers (M39-M43). |
-| `Grid` | `GridGenerator` | Draws the reference grid (one cross-line per data point + baseline). |
-| `WalkSystem` | `WalkValueDriver`, `PathSampler` | Reads the head position → data value → drives cues. |
-| `GraphRoot` | — | Parent transform everything (line, dots, grid) is built under. |
-| `Bootstrap` | `SessionBootstrap` | Runs first (`DefaultExecutionOrder(-100)`). Reads `RunSettings`, activates exactly one player rig, sets `PlayerRig.Head`, applies the audio mode, and (only if `autoStartSession` is checked -- off by default since M34) starts the session immediately; otherwise it stops at Idle, same as returning there after a session completes. |
-| `Condition_*` (5) | `ControlCondition` **or** `CueConditionController` (+ `DensityController`, `CueAudioController`) | One cue-set per condition. |
-| `ExperimentArea` | `ExperimentArea` | Defines the room centre + walk-forward axis + random-point field. |
-| `SessionUI` | `SessionUI` | Self-building world-space study UI (phase prompts + buttons). |
-| `Camera` | `Camera`, `DesktopWalker`, `AudioListener` | Desktop player. Disabled in VR mode. |
-| `XR Origin (XR Rig)` | full XRI Starter-Assets rig | VR player (head + controllers + interactors). Enabled in VR mode. |
-| `XR Origin (VR)` | minimal XROrigin (head only) | Spare/head-only rig; kept disabled. |
 
 ---
 
-## 3. What controls what (data flow)
+## 9. Open items
 
-### Walk-value pipeline (drives the cues)
-```
-head position (DesktopWalker cam OR XR head)
-   → PathSampler.NormalizedPositionValueAt(pos) // M46: where you STAND on the value axis,
-                                                // 0..1 between the dataset's min and max lines
-     (legacy: PathSampler.NormalizedValueAt(pos) = graph value at your walk progress;
-      chosen by WalkValueDriver.feedbackSource)
-   → WalkValueDriver (every frame)           // also gates cues to the walk region
-   → ConditionManager.SetNormalizedValue()   // forwards to the active condition
-   → CueConditionController.Apply(v)
-        → DensityController.UpdateDensity(v)  // visual field density
-        → CueAudioController.SetNormalizedValue(v)  // pitch/tempo
-```
-`SessionController` and `WalkValueDriver` read the head from `PlayerRig.Head`, which
-`SessionBootstrap` sets from `RunSettings.runType`: the XR head camera in VR, the
-`DesktopWalker` camera on Desktop. So the same scene runs in both modes with no rewiring
-(see `XR_MODE_SWITCHING.md`).
-
-### Session pipeline
-```
-SessionController.StartSession()
-   → BuildTrials()                 // counterbalanced condition×dataset list (§5)
-   → NextTrial(): GraphManager.SetData + GenerateGraph + ConditionManager.SetCondition
-   → phases advance via UI buttons OR debug keys (Enter / 1–4)
-   → CSV rows appended as they happen: retracing_log.csv (end of Retrace),
-     value_questions.csv (each answered question), trials.csv (last question answered)
-```
-
-### Audio mode (session-wide)
-`AudioModeSelector` (on `ConditionManager`) pushes the chosen mode
-(Pitch-only / Tempo-only / Both) to **every** `CueAudioController`, including inactive
-ones, so the choice is consistent across all conditions and persists across switches.
-Selectable at runtime from the `SessionUI` start screen.
-
----
-
-## 4. Math & calculations (with study impact)
-
-All constants below are the current serialized/asset values. **Bold** = most likely to
-affect study results.
-
-### 4.1 Graph geometry (`GraphManager`, `GraphSettings`)
-- Local point position: `localPos = (i * spacing, value * heightScale, 0)`
-  with **`spacing = 0.5`**, **`heightScale = 0.2`**.
-- After building vertical, the graph is flat-laid (rotate to the area's forward axis,
-  then +90° about X so it lies on the floor).
-- Uniform resize so the walk spans **`targetWalkLength = 3` m**:
-  `s = targetWalkLength / walkExtentLocal`, applied about `GraphRoot`, then re-centred on
-  `ExperimentArea.Center`. Uniform scale preserves shape, so the value mapping is
-  unchanged. `scaleTweenDuration = 0.6 s`.
-- **Study impact:** `targetWalkLength` sets how far participants physically walk;
-  `heightScale`/`spacing` set the visual aspect ratio of the (flat) shape. Changing
-  `spacing`/`heightScale` changes how "steep" the curve looks and the grid density.
-
-### 4.2 Value sampling (`PathSampler`)
-- Progress along path: `d = dot(worldPos − start, dir)`.
-- Continuous raw value: `t = d / segment; RawValueAt = lerp(values[i], values[i+1], t−i)`
-  (`segment` = world distance between adjacent scaled points).
-- Normalised: `NormalizedValueAt = InverseLerp(min, max, RawValueAt)` → **0..1 per dataset**.
-- On-walk region gate: within `±regionMargin` (**0.5 m**) of the ends along the path AND
-  within `regionHalfWidth` (**2 m**) laterally. Outside → cues gated off (silent, no density).
-- **Standing-position feedback (M46, default):** the cue value is the participant's
-  *lateral* floor position on the graph's value axis, not the graph's value at their
-  progress. `PathSampler` derives the value axis from the final dot positions (ground-plane
-  direction from the min-value dot to the max-value dot, walk component removed), so
-  `norm = InverseLerp(lat(minDot), lat(maxDot), lat(head))`, clamped; head height ignored.
-  Standing exactly on any dot yields that dot's value. Follows any resize/re-centre/area
-  rotation automatically. `WalkValueDriver.feedbackSource = GraphValueAtProgress` restores
-  the old mapping. With a value axis, the lateral region gate is centred on the middle of
-  the value band (not dot 0's line), half-width `max(regionHalfWidth, halfBand)`.
-- **Study impact:** normalisation is **per-dataset**, so cue intensity always spans the
-  full 0..1 range regardless of a dataset's absolute values — cross-condition cue ranges
-  are comparable. `regionHalfWidth`/`regionMargin` define the walkable corridor.
-
-### 4.3 Visual density (`DensityController`)
-- `count = round(lerp(minCount, maxCount, norm))` with **`minCount = 5`, `maxCount = 100`**.
-- **3D cue field (M48):** objects are spread through a room-like box configured on the
-  shared **`GraphSettings` asset** (`Assets/Scripts/GraphSettings.asset`, "Cue Field" header):
-  ExperimentArea footprint + `cueFieldPadding` (**1.5 m** each side → 7×7 m for a 4×4 area),
-  height band `cueFieldHeight` (**0.3–2.8 m**), and `keepWalkZoneClear` (**on**): inside the
-  area footprint objects only spawn above `walkZoneClearHeight` (**2.1 m**), so nothing floats
-  at body/face height on the walk. `cueField3D = false` restores the old floor-plane scatter.
-  Random size `[0.1, 0.3]`; objects scale in/out over `scaleTweenSeconds` (0.3 s) instead of popping.
-- **Looks (M48):** Abstract = `SoftOrb` shader/material: neutral, softly lit pearl orb (no glow,
-  no colour temperature, so it stays generic). Semantic = **chosen per run (M55): `RunSettings.semanticVisualVariant`** -- A `Spark_A_Star` (pointy star), B `Spark_B_Orb` (yellow ball + spark streaks, `SparkOrb`), C `Spark_C_StarGlow` (star mesh + child glow/streak sphere, `SparkGlow`); compare with Tools > Study Visuals > Render Spark Variants. Default A = **`SparkStar`** (M54: no ball -- a spiky 3D starburst mesh, `Assets/Meshes/SparkStar.asset` built by Tools > Study Visuals > Rebuild Spark Star Mesh: tiny white-hot core + 30 sharp needles, yellow -> orange tips, per-spike length crackle, own orientation + slow spin per star). Before M54: `SparkOrb` shader/material
-  (M53, supervisor feedback, matched to `Sources/spark_reference.png`): a yellow ball with a
-  white-hot centre and many thin, straight, tapering spark streaks (yellow-white to orange)
-  that flicker and change length per orb; streaks drawn in-shader around the ball (no
-  post-processing/bloom needed). Replaced the M48 blue `ElectricOrb` (kept in the project, unused). Both float
-  gently, each orb on its own timing; no shadows, no colliders (colliders would block the VR
-  rig in a filled room). Preview without Play: **Tools > Study Visuals > Render Cue Preview**.
-- **Study impact:** the density→value gain (5..100) is identical across the 4 cue
-  conditions, so the *visual* cue strength is matched; only the **prefab** (sphere vs
-  spark) differs by condition.
-
-### 4.4 Audio sonification (`CueAudioController`)
-- **Pitch** = `lerp(minPitch, maxPitch, norm)` = `lerp(0.8, 1.5, norm)`, smoothed toward
-  target at `smoothSpeed = 5` (exponential, ~0.2 s time-constant).
-- **Tempo** = pulses/sec `pps = lerp(minPPS, maxPPS, norm)` = `lerp(1, 8, norm)`;
-  pulse interval `= 1 / pps`. Tempo changes how OFTEN the clip plays, never its speed:
-  in `TempoOnly` the clip always plays at pitch 1 (supervisor, M53). A new pulse starts on
-  a fresh voice while the previous one fades out (8 ms), so pulses never pile up.
-- **Clips (M53):** semantic audio = Freesound #512471 "Electric zap" (michael_grinnell,
-  **CC0**): `spark_zap_pulse.wav` (110 ms, so pulses stay distinct up to 8/s) and
-  `spark_zap_loop_1s.wav` (zap x4, seamless 1 s loop, used for continuous `PitchOnly`).
-  Generic audio = `beep_matched.wav`. All three normalised to **-10 LUFS** -- before M53 the
-  old `electric3.wav` was ~18 dB quieter than the beep (a loudness confound). Built by
-  `Analysis/make_cue_clips.py`; imported as PCM.
-- **Click-free (M53):** every voice has a `DeclickGain` filter (per-sample gain ramp,
-  `fadeMilliseconds` = 8) and every clip gets baked raised-cosine fades at load, so starts,
-  stops, mutes, pulse cut-offs, mode changes and condition switches never pop. Verified by
-  recording the real output with a pure-sine test clip: 0 discontinuities in 34 s across
-  all of those events (`Assets/Scripts/Dev/AudioOutputRecorder.cs`).
-- **Study setting (M57): `TempoOnly`** -- per the supervisor, only the repeat rate changes;
-  the clip itself always plays at normal speed/pitch. Check live in the Inspector on the
-  active condition's CueAudioController: *Live Playback Speed* must read 1.00.
-- **Modes** (`AudioMode`, set session-wide): `PitchOnly` (continuous loop, pitch varies),
-  `TempoOnly` (pulses, pitch held at 1), `Both` (pulses whose rate + pitch vary).
-- **Static** (`respondToValue = false`): steady hum at pitch ≈ 1, ignores the walk.
-  **No condition uses it since M47** (it was `SemanticAudio`'s setting before); kept as an option.
-- **Study impact:** pitch/tempo ranges are matched across reacting conditions, so audio
-  cue *intensity* is comparable; the manipulations are the **clip** (beep vs electric) and
-  whether it reacts (`respondToValue`). Changing the ranges changes cue salience for all.
-
-### 4.5 Recall questions (`SessionController.MakeNumericQuestion`)
-- Four numeric answers: highest, lowest, last value, (max−min) difference.
-- Distractors: offsets of `±k · step` where **`step = max(1, round(range · 0.15))`**
-  (`range` = dataset max−min); 3 distinct, non-negative options by display value.
-- **Correct-answer slot is randomised** with a reproducible seed
-  `participantId ^ (orderIndex+1) ^ (qIndex+1)` → unpredictable to the participant but
-  deterministic for analysis. (Previously it was a fixed diagonal — fixed in M7.)
-- **Study impact:** removes positional-guessing confound; distractors scale with each
-  dataset's range so difficulty is comparable across datasets.
-
-### 4.6 Condition order & counterbalancing (`SessionController.BuildTrials`)
-- Condition order is chosen by **`RunSettings.conditionOrderMode`** (M29), one of:
-  - `Sequential` — the same fixed order every session: Control, Abstract, Representative,
-    SemanticAudio, SemanticVisual. Identical for every participant — **provides no
-    order-effect counterbalancing on its own**.
-  - `Random` — all 5 conditions (Control included) shuffled into a fully random order.
-  - `RandomExceptControlFirst` — Control is forced into position 0; the remaining 4 are
-    shuffled after it, so every participant sees Control first.
-  The two random modes are seeded from `participantId` (and the block index, if
-  `trialsPerCondition > 1`) via `BuildConditionOrder`/`ConditionOrderSeed` — reproducible
-  per participant, not dependent on Unity's global random state, same pattern as the
-  recall answer-slot seed in §4.5.
-- Dataset per trial is independent of condition order: `datasetPool[(startDs + order) mod
-  poolCount]`, `startDs = (p−1) mod 6`, where `order` is just the flat 0-based trial index
-  — whichever condition `BuildConditionOrder` places at that index gets paired with it.
-- **Study impact:** `Sequential` is simplest but the whole cohort sees the same order
-  (a real design decision — pick this only if you have another reason to trust internal
-  validity, e.g. a short pilot). `RandomExceptControlFirst` establishes Control as a
-  consistent baseline/acclimation trial while still varying the other 4. Neither random
-  mode is a formal Latin square, so with a small cohort, order could by chance skew
-  toward one condition landing later more often than a true Latin square would prevent
-  — for guaranteed per-position balance across participants, a Latin-square rotation
-  (as used before M29) would need to be reintroduced as an additional mode.
-- **Known minor issue (pre-existing, still applies to dataset assignment):** `startDs`
-  advances by a fixed +1/participant, so dataset assignment is the same sequence
-  regardless of condition order; if full decorrelation from `participantId` is needed,
-  advance `startDs` by a different stride (a prime).
-
-### 4.7 Retrace capture (`SessionController.Update`)
-- **When it happens:** once per trial, between `Distractor` and `Recall` — the phase
-  order per trial is always `Walk -> Distractor -> Retrace -> Recall`. Retrace is on
-  that same trial's own dataset/graph: the line/dots are hidden and the condition is
-  forced to `Control` (no cues) so it's tested purely from memory, then the participant
-  walks the same physical corridor again trying to reproduce the shape they just walked
-  in `Walk`. It ends automatically (`CheckAutoEndOfPhase`) once they walk from the start
-  of the corridor to the far end again — same auto-end mechanism as `Walk` (M27).
-  Since nothing else tells the participant to walk back to the start first, `SessionUI`
-  now shows that instruction on screen for a few seconds at the start of Retrace before
-  hiding itself again (M36) — see §7's UI note below.
-- **M33 bug (fixed):** that auto-end check originally only tested "has the head passed
-  the far end," which could be true from the *previous* phase's end position (nothing
-  resets the participant physically between phases) — so Retrace could auto-complete
-  almost instantly, before the participant ever walked anywhere. Confirmed against real
-  session data: `retrace_seconds` was stuck at exactly the grace period (~0.5s) for every
-  trial across two full sessions, with `retracing_log.csv` showing 5-6 samples per trial
-  and a frozen head position. Fixed by requiring the participant be back near the start
-  at some point during the *current* Retrace before the far-end check can complete it —
-  see M33 in ROADMAP.md.
-- During `Retrace`, the head's ground position `(x, z)` is sampled every
-  **`retraceSampleInterval = 0.1 s`** into `retracePath` — i.e. 10 samples/sec.
-  **Against the sources-folder data notes doc (M39):** its footnote on File 3
-  (`retracing_log.csv`) says a trajectory/heatmap reconstruction needs "once per frame,
-  or at the very least once per second." The current 10 Hz already comfortably clears
-  that stated minimum; the doc's *ideal* is once per frame (~60 Hz on most headsets),
-  which this project doesn't currently need for anything (no in-VR heatmap/trajectory
-  visualization is built) but is a one-line change (`retraceSampleInterval`, or `0` to
-  sample every `Update()`) if finer-grained analysis ever calls for it — the tradeoff is
-  proportionally more `retracing_log.csv` rows per trial. The written columns already
-  match the doc's File 3 schema (`participant_id/condition/audio_cue/visual_cue/
-  dataset_id/timestamp/head_x/head_y/head_z`), plus two extras (`presentation_order`,
-  `t_seconds`).
-- **Study impact / data gap:** `retracing_log.csv` stores the path but **not** the graph
-  geometry, so absolute retrace accuracy can't be recovered from the log alone.
-  `analyze_study.py` gives a normalised shape-correlation *proxy* via `datasets.json`
-  (`retrace_shape_r` per trial in `analysis_trials.csv`), and (M32) a PNG plot per trial
-  under `<out_dir>/plots/` showing the original data's profile against the participant's
-  actual retrace, titled with that same correlation value. For rigorous accuracy, log the
-  per-trial value profile / graph transform in `SessionController`'s CSV-writing methods.
-
----
-
-## 5. "I want to change X" — quick guide
-
-| Goal | Where |
-|------|-------|
-| Different data | Edit/replace the `Dataset_01..06` GraphData assets, or change `SessionController.datasetPool`. Re-export `Analysis/datasets.json` (see HOW_TO_RUN). |
-| Longer/shorter physical walk | `GraphManager.targetWalkLength` (metres). |
-| More/less visual density | `DensityController.minCount/maxCount` (per condition, but keep them equal across conditions to stay matched). |
-| Audio pitch/tempo salience | `CueAudioController.minPitch/maxPitch`, `minPulsesPerSecond/maxPulsesPerSecond`. |
-| Default audio mode | `AudioModeSelector.mode` (or pick at runtime on the start screen). |
-| 2 trials per condition | `SessionController.trialsPerCondition = 2`. |
-| Which participant | `SessionController.participantId` (drives condition-order/dataset seeding + the `participant_id` column, formatted `p01`/`p02`/…); auto-suggested at startup and adjustable on the Idle screen (M28), and re-suggested automatically when returning from Complete to Idle for the next participant (M31, via `ReturnToIdle()` / the Complete screen's "Next Participant" button). |
-| Condition order (Sequential/Random/Random-except-Control-first) | `RunSettings.conditionOrderMode` (§4.6, M29). |
-| Walkable corridor size | `PathSampler.regionMargin`, `regionHalfWidth`. |
-| Recall difficulty | distractor `step` factor (0.15) in `MakeNumericQuestion`. |
-| Add/rename a condition | Add a `ConditionId`, add a `Condition_*` object with `CueConditionController`, add it to `ConditionManager.conditions` **in id order**, add to `AllConditions` in `SessionController`. |
-| Desktop ↔ headset | See `XR_MODE_SWITCHING.md`. |
-| Skip the Idle confirm screen (auto-start like before M34) | Check `autoStartSession` on the `Bootstrap` GameObject's `SessionBootstrap` component. |
-| Run analysis without the command line | `python Analysis/analysis_gui.py` (M35) — see §6. |
-
----
-
-## 6. Analysis (`Analysis/analyze_study.py`, `Analysis/analysis_gui.py`)
-
-- Input: the `StudyData` folder itself — each participant's own subfolder
-  (`StudyData/p01/trials.csv`, `StudyData/p02/trials.csv`, ... — see M28) is read and
-  concatenated; a flat `StudyData/trials.csv` etc. is also read directly if present,
-  for backward compatibility with data collected before per-participant folders
-  existed. No JSON parsing anymore.
-- Two ways to run it (M35): the CLI (`python analyze_study.py <StudyData folder>`,
-  optionally `--participant p03` for just one), or the GUI (`python analysis_gui.py`) —
-  pick the folder, see every participant it finds, then **Analyze All** or select one
-  and **Analyze Selected Participant**. Both call the same `run_analysis()` function in
-  `analyze_study.py`, so they can never drift apart / give different numbers.
-- Output (default `StudyData/analysis/` for all participants, `StudyData/analysis/<id>/`
-  for a single-participant run — so re-running one participant never overwrites the
-  all-participants output — overridable with `--out` / "Choose Output..."):
-  `analysis_trials.csv` (every raw trial column plus recall %, retrace path metrics,
-  optional shape-correlation), `analysis_conditions.csv` (per-condition mean recall % +
-  SD), `analysis_participant_order.csv` (M30, which condition order each participant
-  saw), and (M35) `summary.csv` — the same headline numbers printed to the console,
-  saved as a plain one-column CSV so a run's result is a file you can open, not just a
-  terminal printout.
-- `datasets.json` (exported from the GraphData assets) enables the retrace shape-correlation
-  proxy and the PNG plots; regenerate it if the datasets change. Since M35 it's picked up
-  automatically when it sits next to the script — `--datasets` only needed to point
-  elsewhere.
-- Not implemented: the data notes doc's 5th file, `questionnaires.csv` (TLX etc.) — no
-  questionnaire UI exists in the project yet.
-- (M32) Optional per-trial retrace-vs-original PNG plots under `<out_dir>/plots/`,
-  generated automatically when a datasets file is available and matplotlib is installed
-  (`--no-plots` to skip). Same resampled/normalized basis as `retrace_shape_r`.
-
----
-
-## 7. Known issues / decisions pending
-
-- ~~**M12 walk-phase UI occlusion**~~ RESOLVED (M27): the panel is now hidden entirely
-  during Walk and Retrace (`SessionUI.Render`), and those two phases auto-end when the
-  participant walks past the far end of the graph corridor (`SessionController.
-  CheckAutoEndOfPhase`) instead of waiting for a "Done" button. The panel is visible
-  only for Idle / Distractor / Recall / Complete, i.e. only when a real interaction
-  (button, MCQ, text entry) is expected. See M27 in ROADMAP.md.
-- ~~**M27 false-completion risk**~~ RESOLVED (M33): Walk/Retrace auto-end now requires
-  a genuine start-to-end pass (see §4.7) instead of just "currently past the far end,"
-  which could be left over from a previous phase.
-- ~~**Idle screen skipped on first Play**~~ RESOLVED (M34): `SessionBootstrap.
-  autoStartSession` now defaults off, so every fresh Play stops at Idle for the
-  researcher to confirm the participant ID/audio mode, same as after a session
-  completes.
-- ~~**No instruction to walk back to start before Retrace**~~ RESOLVED (M36): `SessionUI`
-  briefly shows "Walk back to the start, then retrace the shape you just walked --
-  from memory." at the start of Retrace, then hides as before. Confirmed (not a bug):
-  no cue feedback is active during Retrace regardless of the participant's position --
-  `EndDistractor()` forces the `Control` condition first, and `Control`'s cues are
-  no-ops.
-- ~~**Feedback could start before the graph visually settled**~~ RESOLVED (M36): found
-  and fixed two compounding bugs in `GraphManager` -- `IsGenerating` was clearing ~2.2s
-  before the align/resize tween actually finished, and `PathSampler` was never reset
-  between trials, so it stayed "ready" with the previous trial's stale geometry through
-  that whole window. `WalkValueDriver`'s cue gate (`PathSampler.IsReady`) could therefore
-  fire against stale data while the new graph was still visibly flipping/resizing.
-  `PathSampler.Clear()` now runs at the start of every generation, and `IsGenerating`
-  only clears once the sampler is actually reconfigured against the final geometry.
-- ~~**Walk/Retrace never auto-ended in a live session**~~ RESOLVED (M37): found live
-  (user still in Play mode) -- `SessionController.pathSampler`'s auto-resolve
-  (`FindAnyObjectByType<PathSampler>()`, M27) had picked a stray leftover `TempSampler`
-  GameObject instead of the real `WalkSystem` sampler `GraphManager` actually
-  configures, so `pathSampler.IsReady` was permanently false on `SessionController`'s
-  copy and `CheckAutoEndOfPhase` returned every frame -- no amount of walking ended
-  the phase. The stray object turned out to be Play-mode-only (not in the saved
-  scene), but the underlying ambiguity was real: `SessionController` now resolves via
-  `WalkValueDriver.Path` (the same instance cues already use) instead of a blind
-  scene-wide search, so any future stray `PathSampler` can't get silently picked
-  again.
-- ~~**Audio/density cues fired the instant a condition activated, regardless of
-  region**~~ RESOLVED (M38): found live -- after finishing Control + Retrace + recall,
-  the next trial's condition activated and its audio cue started playing immediately,
-  even though the participant was nowhere near the walk (it self-silenced once graph
-  generation finished). Root cause: `CueAudioController.OnEnable()` unconditionally
-  called `ConfigureSource()`, which for continuous/pitch-carrying audio modes called
-  `audioSource.Play()` regardless of mute/region state -- `_muted` defaulted to `false`
-  and nothing reset it on activation. This bug predates M36/M37 but was previously
-  masked: before M36, `PathSampler` stayed stale-"ready" across the trial boundary, so
-  `WalkValueDriver` re-muted it again within a frame or two. M36's fix (correctly
-  keeping the sampler "not ready" for the full ~2.5s the graph is generating/settling)
-  made the pre-existing gap long enough to actually hear. `CueConditionController` had
-  the same latent gap for the density visual (`_cuesActive` defaulted `true`, never
-  reset on activation) -- not yet reported but same root cause, fixed defensively.
-  `CueAudioController` now starts `_muted = true` and resets it on every `OnEnable`;
-  `ConfigureSource()` never plays while muted. `CueConditionController.OnEnable()` now
-  resets `_cuesActive = false` (clearing density, muting audio), so a condition reused
-  across trials can't inherit an unmuted state from its previous activation either.
-- ~~**Next trial's graph generated the instant the last recall question was
-  answered**~~ RESOLVED (M39): the participant was still standing wherever Recall left
-  them (often the far end of the corridor), so the next graph would start forming
-  around them with no walk back to the start first. A new `SessionPhase.TrialComplete`
-  now sits between Recall and the next Walk: `SessionUI` shows a "walk back to the
-  Start marker" message until `SessionController.CheckReadyToStartNext` confirms the
-  participant is actually back near the start, then swaps in a "Start Next Trial"
-  button that calls `SessionController.StartNextTrial()`.
-- ~~**No physical landmark for where the walk starts/ends**~~ RESOLVED (M39): added
-  `EndpointMarkers.cs` -- a floor ring + "Start"/"End" `TextMeshPro` label at each end
-  of the corridor, placed by `GraphManager` once the graph settles and cleared before
-  the next trial's graph generates. Pure world-space geometry (no screen-space UI), so
-  it needs no separate VR handling.
-- ~~**Start/End markers landed off-centre (left/right of the corridor)**~~ RESOLVED
-  (M40): they were anchored on the graph's value=0 baseline, which is only the
-  corridor's true centreline when a dataset happens to have exactly 0 at that end.
-  Now anchored on `PathSampler`'s own d=0/d=TotalLength points (dot 0's and dot N's
-  actual final positions), which by construction always sit exactly on the real
-  centreline. Also changed the marker shape from a ring to a rectangle sized to the
-  actual walkable zone (`2 x RegionHalfWidth` wide, `2 x RegionMargin` deep along the
-  walk), both now exposed as public properties on `PathSampler`.
-- ~~**Start/End markers straddled the graph's own start/end instead of the zone
-  boundary**~~ RESOLVED (M41): reported live with an annotated screenshot -- the
-  markers (M40) were centred on dot0/dotN, so half of each sat inside the graph's own
-  walked region rather than at the actual feedback-zone edge. Now anchored on the real
-  zone boundary (`regionMargin` beyond dot0/dotN -- the same point `IsWithinRegion`
-  treats as "off the walk") and positioned entirely outside it, one edge flush with
-  the boundary.
-- ~~**End marker drifted to one side whenever a dataset's first/last values
-  differed**~~ RESOLVED (M42): M41 anchored the End marker on dotN's own position,
-  but `PathSampler` models the whole corridor as a straight line from dot0 along
-  `walkDir` -- dotN's own lateral value is never part of that model, so anchoring on
-  it used a different reference than `IsWithinRegion` itself enforces. Both markers
-  are now derived purely from dot0 walked along `walkDir`, which by definition can
-  never change the lateral coordinate -- so they're lateral-identical for any dataset.
-- ~~**Markers still didn't align with "the zone"**~~ RESOLVED (M43): "the zone" turned
-  out to mean `ExperimentArea`'s own footprint (the cyan Scene-view gizmo), a different
-  rectangle entirely from the graph/`PathSampler` that every earlier attempt (M40-M42)
-  had anchored on. Now derived purely from `ExperimentArea.Center`/`Width`/`Depth`
-  instead of anything graph-derived.
-- **Retrace accuracy data gap** (§4.7): log the value profile for rigorous scoring.
-- **Enum vs object naming** for id 3/4 (§1): cosmetic mismatch.
-- **Counterbalancing dataset correlation** (§4.6): optional decorrelation improvement.
-- **Hardware sign-off:** M9/M10/M12 are simulator-verified; a real-headset pass remains
-  (room-scale tracking feel, in-headset legibility, controller point-and-click).
+- **Headset check** of the floor value labels (M67) and the settings/area changes (M68)
+  on the Quest.
+- **Dataset–condition pairing** (§5): agree with the supervisor.
+- **Pilot** (1–2 people): session length against the 1.5 h slot, walk length/area size
+  for the hall (Atalpa, 30.10–8.11.2026).
+- The value-0 baseline of the grid is drawn at value 0, which can lie outside the area
+  for data far from 0.
+- No resume after a crash: an interrupted session is ended and the participant
+  restarted under a new number (data so far is kept, `session_events.csv` shows it).
+- Clear the test participant folders from the editor/headset data before real
+  collection.

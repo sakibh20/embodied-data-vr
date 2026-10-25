@@ -1,9 +1,14 @@
 # Embodied-Data-VR — Completion Roadmap
 
-Status snapshot (2026-08-02): The July refactor rewrote nearly every script but the
-scene was not fully re-wired. Datasets (6), audio clips, and cue prefabs exist. VR rig
-is present. Blocking issues: SessionController null refs, incomplete ConditionManager
-list, a possibly-missing 5th condition, and the whole refactor is uncommitted.
+Status snapshot (2026-10-25): the study app is feature-complete for data collection
+and runs standalone on the Quest 2 (M63). Full flow in place: consent, background
+questions, tutorial (2 practice trials), 25 trials (5 conditions x 5, Latin-square
+block order), recall after every trial, post-condition questionnaire, researcher menu,
+in-app settings, CSV logging and analysis. Open: headset check of M67/M68, the
+dataset-condition pairing decision, pilot (M14), data collection at Atalpa
+30.10-8.11.2026 (M15), statistics (M17) and the write-up (M18). Current-state
+description: `PROJECT_DESCRIPTION.md`. The 2026-08-02 starting snapshot: the July
+refactor had rewritten nearly every script but the scene was not re-wired.
 
 We progress one milestone at a time. Check items off as we go.
 
