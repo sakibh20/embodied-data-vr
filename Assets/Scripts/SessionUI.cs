@@ -397,8 +397,8 @@ public class SessionUI : MonoBehaviour
         var r5 = AddSettingsRow();
         AddStepper(r5, "Tutorial", v.tutorial ? "On" : "Off",
             d => { v.tutorial = !v.tutorial; Changed(); });
-        var pad = AddText(r5, "", 24, TextAlignmentOptions.Left).GetComponent<LayoutElement>();   // empty right half
-        pad.flexibleWidth = 1f; pad.minWidth = 150f + 60f + 190f + 60f + 30f;
+        AddStepper(r5, "Dataset order", v.datasetOrder == DatasetOrderMode.LatinSquareSets ? "Latin sq. sets" : "Rotate",
+            d => { v.datasetOrder = RuntimeSettings.Cycle(v.datasetOrder, d); Changed(); });   // M69
 
         // M66: study data on this device
         string summary = SessionController.StudyDataShortSummary(out int nParticipants);

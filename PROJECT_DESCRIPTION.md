@@ -5,7 +5,7 @@
 > milestone (Mxx numbers below point there). Companion files: `HOW_TO_RUN.md` (running
 > sessions, building for the Quest, copying data), `XR_MODE_SWITCHING.md` (desktop vs
 > headset), `GRID_SETUP.md` (floor grid).
-> Last updated: 2026-10-25 (through M68).
+> Last updated: 2026-10-27 (through M69).
 
 Study title used with participants: **"Audio and visual cues for remembering data in
 virtual reality"** (Tampere University MSc thesis). Unity 6000.3.10f1, URP, OpenXR,
@@ -49,8 +49,12 @@ practice trial and never appears in the experiment order (M60).
   "Day 1" … "Day 30", unit kWh (M60).
 - **Tutorial:** Energy_d43 (practice 1, Control) and Energy_d37 (practice 2, Tutorial
   cues), the same for every participant.
-- **Experiment pool:** the other **28** datasets (`SessionController.datasetPool`).
-  Each participant does 25 trials, so nobody sees a dataset twice.
+- **Experiment sets (M69):** 25 of the other 28 datasets, grouped into **5 fixed sets of
+  5** (`RunSettings.datasetSets`), matched on mean, SD, range, maximum, minimum, end
+  value, mean day-to-day change and number of turns (set means differ by at most
+  ~1 kWh on each). Each participant walks all 25 once. Not used: d04 (unusually wide
+  range), d06 and d19 (unusually low values / flat). The full 28 stay in
+  `SessionController.datasetPool` for the old rotation mode.
 
 ---
 
@@ -266,6 +270,7 @@ panel is visible during a session. Every such action is logged in
 | Audio cue | tempo only | pitch / tempo / both |
 | Spark look | C: star + glow | A / B / C |
 | Tutorial | on | on / off |
+| Dataset order | Latin-square sets | Latin-square sets / rotate |
 
 Plus **Study data**: participant and trial counts on the device and **Delete all
 data…** (red confirm screen; copy the data to the PC first). Defaults come from
@@ -281,11 +286,24 @@ never changed. Every value actually used is written to `session_info.csv`.
   twice in each position and each condition follows every other exactly twice (M47).
   One order per participant; trials are **blocked** (all 5 trials of a condition back
   to back, M59).
-- **Datasets:** the 28-dataset pool in a fixed order; participant *p* starts at
-  position (p − 1) mod 28 and takes the next dataset for every trial (wrapping round).
-  The dataset–condition pairing therefore varies between participants but is **not
-  explicitly balanced** (open question with the supervisor; options: keep and treat
-  dataset as a random effect, or fixed sets of 5 datasets rotated across conditions).
+- **Datasets — Latin square too (M69, supervisor 2026-10-27):** condition *i* (in the
+  order Control, Abstract, Representative, SemanticAudio, SemanticVisual) gets set
+  S((i + p − 1) mod 5 + 1) for participant *p*, and within the set the five datasets
+  start at position (p − 1) mod 5. Result, verified for participants 1–10: over every
+  5 participants each set meets each condition once and each dataset takes each trial
+  slot (1st–5th in its block) once; with the 10-row condition square, over every 10
+  participants each set is also in each block position twice.
+
+  | Set | Datasets |
+  |-----|----------|
+  | S1 | d05, d10, d11, d24, d25 |
+  | S2 | d01, d09, d14, d28, d34 |
+  | S3 | d13, d18, d22, d23, d26 |
+  | S4 | d03, d08, d15, d35, d36 |
+  | S5 | d02, d07, d12, d16, d33 |
+
+  Setting "Dataset order" = *Rotate* restores the previous pool rotation (pairing not
+  balanced).
 - The tutorial trials always come first and are excluded from the order.
 
 ---
@@ -300,10 +318,10 @@ z = along the walk, relative to the area centre; y = height.
 
 | File | One row per | Main columns |
 |------|-------------|--------------|
-| `session_info.csv` | session | run type, headset, Unity version, condition order mode + Latin-square row + order, trials per condition, practice/experiment counts, dataset pool size + order, audio mode, recall mode, spark variant, area width/depth, marker gap, sample interval, walk length |
+| `session_info.csv` | session | run type, headset, Unity version, condition order mode + Latin-square row + order, trials per condition, practice/experiment counts, dataset pool size + order, audio mode, recall mode, spark variant, area width/depth, marker gap, sample interval, walk length, dataset order mode, condition→set (e.g. "Control=S1 Abstract=S2 …") |
 | `consent.csv` | consent answer | consent_version, response ("I consent" / "I do not consent"), timestamp, local time |
 | `background.csv` | background question | item_id, item_text, response (option text) |
-| `trials.csv` | trial | condition, audio_cue, visual_cue, presentation_order, trial_in_condition, dataset_id, start/end time, walk/distractor/retrace seconds, distractor start number, recall_score/total, walk/retrace sample counts |
+| `trials.csv` | trial | condition, audio_cue, visual_cue, presentation_order, trial_in_condition, dataset_id, start/end time, walk/distractor/retrace seconds, distractor start number, recall_score/total, walk/retrace sample counts, dataset_set (S1–S5) |
 | `value_questions.csv` | recall question | question type/text, correct answer, response, abs_error, error_pct_of_range, is_correct, answer_mode |
 | `walking_log.csv` | movement sample in Walk (10 Hz, from the Start marker) | t_seconds, head_x/y/z, head_yaw_deg (relative to the walk direction), head_pitch_deg, cues_on, cue_value |
 | `retracing_log.csv` | movement sample in Retrace (same format) | as above |
@@ -367,7 +385,6 @@ Tools/                             install_quest_build / pull_quest_data (.bat +
 
 - **Headset check** of the floor value labels (M67) and the settings/area changes (M68)
   on the Quest.
-- **Dataset–condition pairing** (§5): agree with the supervisor.
 - **Pilot** (1–2 people): session length against the 1.5 h slot, walk length/area size
   for the hall (Atalpa, 30.10–8.11.2026).
 - The value-0 baseline of the grid is drawn at value 0, which can lie outside the area

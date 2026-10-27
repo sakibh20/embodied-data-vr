@@ -17,11 +17,49 @@ MonoBehaviour:
   recallInputMode: 1
   conditionOrderMode: 3
   trialsPerCondition: 5
+  datasetOrderMode: 1
+  datasetSets:
+  - name: S1
+    datasets:
+    - {fileID: 11400000, guid: 444471f01331d354c96baab33c26b4b9, type: 2}
+    - {fileID: 11400000, guid: 023f5678219841247ba8d6743781c13c, type: 2}
+    - {fileID: 11400000, guid: 733007d85b6bab8478da668405cf756d, type: 2}
+    - {fileID: 11400000, guid: 9e9bf5338c3efda4a8b9ff26293ae22e, type: 2}
+    - {fileID: 11400000, guid: b2d87490cd06cc84e98c7d8df280872b, type: 2}
+  - name: S2
+    datasets:
+    - {fileID: 11400000, guid: a1b317daeb6f19a479234cbfbbb002fb, type: 2}
+    - {fileID: 11400000, guid: 51b1b196e6213e14eb9561232bf5099e, type: 2}
+    - {fileID: 11400000, guid: a2be37ce94ee35140a53d86cb8633654, type: 2}
+    - {fileID: 11400000, guid: 9a732440c77807b41bc18a943b8320ed, type: 2}
+    - {fileID: 11400000, guid: 470ea45cbaa8f3c4982c9e70bb9f9534, type: 2}
+  - name: S3
+    datasets:
+    - {fileID: 11400000, guid: 740980d832160b747b527b6e1fbf3deb, type: 2}
+    - {fileID: 11400000, guid: c8b626ae32dc1a24d8b2487563fdd2ea, type: 2}
+    - {fileID: 11400000, guid: dceaba7015429854bab2b393e14c6a33, type: 2}
+    - {fileID: 11400000, guid: 3ebfbed020a8b4c4582249ed15257f10, type: 2}
+    - {fileID: 11400000, guid: 7aa3985db0b464043850d8eb3a93b0e0, type: 2}
+  - name: S4
+    datasets:
+    - {fileID: 11400000, guid: 80a5895378912864fb36710e32907247, type: 2}
+    - {fileID: 11400000, guid: f669c5a691b47bd4aa064d5564636dad, type: 2}
+    - {fileID: 11400000, guid: d87fdd092a684374c9bedf6056695b42, type: 2}
+    - {fileID: 11400000, guid: d59e003fc2b4a514eb39dfe29b72f071, type: 2}
+    - {fileID: 11400000, guid: 9f2280a691100c143aa061bbafcc37f1, type: 2}
+  - name: S5
+    datasets:
+    - {fileID: 11400000, guid: 608bbea19fe9d584a8a76a85462b24ab, type: 2}
+    - {fileID: 11400000, guid: 322f680f8c1dcc84ba120ed7291211c8, type: 2}
+    - {fileID: 11400000, guid: aa796a2ab55635a499ecb9313d98e616, type: 2}
+    - {fileID: 11400000, guid: d327e3e46cba6264ba6a1fcd2efe8b25, type: 2}
+    - {fileID: 11400000, guid: bae1e6fedcfeae04c93c18d7e717e85d, type: 2}
   tutorialTrials:
   - condition: 0
     dataset: {fileID: 11400000, guid: bf6365b080ec16a40bd4cad91dd04be1, type: 2}
   - condition: 5
     dataset: {fileID: 11400000, guid: 32d32a96c12b65940b83575968bfc454, type: 2}
+  tutorialEnabled: 1
   instructionsTitle: Welcome
   instructionsText: 'In this study you will walk along line graphs laid out on the
     floor. Each graph shows a household''s daily energy use over one month.

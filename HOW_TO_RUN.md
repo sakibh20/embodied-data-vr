@@ -2,7 +2,7 @@
 
 > Practical guide: build and install on the Quest, run a session, copy and analyse the
 > data. How the system works is in `PROJECT_DESCRIPTION.md`; history in `ROADMAP.md`.
-> Last updated: 2026-10-25 (through M68).
+> Last updated: 2026-10-27 (through M69).
 
 ---
 
@@ -44,7 +44,7 @@
   zone + gap + End marker), plus space to stand around it.
 - Open the app, check **Settings** (§4) — walk length, area width, trials per condition
   (5), condition order (Latin square), recall answers (number pad), audio (tempo only),
-  spark look (C), tutorial on. Settings are saved on the headset and kept between
+  spark look (C), tutorial on, dataset order (Latin sq. sets). Settings are saved on the headset and kept between
   launches.
 - Have the paper **information sheet** and **privacy notice** ready, and the laptop with
   the Microsoft Form (four open-ended questions) for the end.
@@ -109,6 +109,7 @@ the area.
 | Audio cue | Tempo only | pitch / tempo / both |
 | Spark look | C: star + glow | A / B / C |
 | Tutorial | On | |
+| Dataset order | Latin sq. sets | datasets in 5 fixed sets, Latin-square rotated across conditions; or Rotate (old pool rotation) |
 
 Changes are saved immediately and shown on the floor straight away: the old graph is
 cleared and the Start/End markers move to the new layout (the Start spot stays where it

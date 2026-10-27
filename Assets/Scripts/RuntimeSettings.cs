@@ -22,6 +22,7 @@ public class RuntimeValues
     public CueAudioController.AudioMode audioMode = CueAudioController.AudioMode.TempoOnly;
     public SemanticVisualVariant sparkVariant = SemanticVisualVariant.SparkStar;
     public bool tutorial = true;
+    public DatasetOrderMode datasetOrder = DatasetOrderMode.LatinSquareSets;   // M69
 
     public RuntimeValues Clone() => (RuntimeValues)MemberwiseClone();
 }
@@ -57,6 +58,7 @@ public static class RuntimeSettings
             audioMode = rs != null ? rs.audioMode : CueAudioController.AudioMode.TempoOnly,
             sparkVariant = rs != null ? rs.semanticVisualVariant : SemanticVisualVariant.SparkStar,
             tutorial = rs == null || rs.tutorialEnabled,
+            datasetOrder = rs != null ? rs.datasetOrderMode : DatasetOrderMode.LatinSquareSets,
         };
         Current = Defaults.Clone();
         if (PlayerPrefs.HasKey(PrefsKey))
@@ -80,6 +82,7 @@ public static class RuntimeSettings
             _rs.audioMode = v.audioMode;
             _rs.semanticVisualVariant = v.sparkVariant;
             _rs.tutorialEnabled = v.tutorial;
+            _rs.datasetOrderMode = v.datasetOrder;
         }
         if (_graph != null) _graph.TargetWalkLength = v.walkLength;
         if (_area != null)

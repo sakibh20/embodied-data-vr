@@ -1,5 +1,29 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
+
+/// <summary>M69: how datasets are assigned to the experiment trials.</summary>
+public enum DatasetOrderMode
+{
+    /// <summary>Old behaviour: every trial takes the next dataset in the pool, starting at
+    /// (participant - 1); the dataset-condition pairing is not balanced.</summary>
+    Rotate,
+    /// <summary>Latin square: 5 fixed sets of 5 datasets (datasetSets). Condition i (in
+    /// AllConditions order) gets set (i + participant - 1) mod 5, and within a set the
+    /// datasets start at (participant - 1) mod setSize. Over every 5 participants each set
+    /// meets each condition once and each dataset takes each trial slot once; combined
+    /// with the 10-row Williams condition order, over every 10 participants each set is
+    /// also in each block position twice.</summary>
+    LatinSquareSets,
+}
+
+/// <summary>M69: one fixed set of datasets (see DatasetOrderMode.LatinSquareSets).</summary>
+[Serializable]
+public class DatasetSet
+{
+    public string name;
+    public List<GraphData> datasets = new List<GraphData>();
+}
 
 /// <summary>Which rig drives the walk for a session.</summary>
 // Explicit values: VR keeps its old serialized value (2) after the XR Interaction
@@ -82,6 +106,14 @@ public class RunSettings : ScriptableObject
              "Each trial uses the next dataset in the pool, so the pool needs " +
              "5 x n datasets to avoid repeats.")]
     [Range(1, 10)] public int trialsPerCondition = 1;
+
+    [Header("Dataset assignment (M69)")]
+    [Tooltip("LatinSquareSets (supervisor, 2026-10-27): datasets come in 5 fixed sets and the set " +
+             "for each condition is Latin-square rotated by participant. Rotate: the old pool rotation.")]
+    public DatasetOrderMode datasetOrderMode = DatasetOrderMode.LatinSquareSets;
+    [Tooltip("Exactly one set per condition (5). Sets were matched on mean, SD, range, max, min, " +
+             "end value, day-to-day change and number of turns (ROADMAP M69).")]
+    public List<DatasetSet> datasetSets = new List<DatasetSet>();
 
     [Header("Tutorial (M60)")]
     [Tooltip("Practice trials before the experiment, the same for every participant: an " +

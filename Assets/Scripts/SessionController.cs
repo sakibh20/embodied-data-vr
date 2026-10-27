@@ -631,25 +631,57 @@ private void Awake()
         // takes the next dataset in the participant-rotated pool.
         int reps = TrialsPerCondition;
         ConditionId[] condOrder = BuildConditionOrder(mode, 0);
+
+        // M69 (supervisor, 2026-10-27): Latin-square the datasets too. Condition i (index
+        // in AllConditions) gets set (i + p) mod 5, p = participant - 1; inside the set the
+        // datasets start at p mod setSize. Falls back to the pool rotation if the sets
+        // aren't set up (one non-empty set per condition).
+        var rsSets = StudyConfig.Settings;
+        bool useSets = rsSets != null && rsSets.datasetOrderMode == DatasetOrderMode.LatinSquareSets
+                       && DatasetSetsValid(rsSets.datasetSets, n);
+        if (rsSets != null && rsSets.datasetOrderMode == DatasetOrderMode.LatinSquareSets && !useSets)
+            Debug.LogWarning("[Session] Dataset order = LatinSquareSets but RunSettings.datasetSets is not " +
+                             "one non-empty set per condition -- falling back to the pool rotation.");
+        int p0 = ((participantId - 1) % n + n) % n;
+
         for (int k = 0; k < n; k++)
         {
+            int ci = System.Array.IndexOf(AllConditions, condOrder[k]);
+            DatasetSet set = useSets ? rsSets.datasetSets[(ci + p0) % n] : null;
+            if (set != null && set.datasets.Count < reps)
+                Debug.LogWarning($"[Session] Set {set.name} has {set.datasets.Count} datasets for {reps} trials -- some repeat.");
             for (int rep = 0; rep < reps; rep++)
             {
-                var ds = datasetPool[(startDs + order) % datasetPool.Count];
+                GraphData ds = set != null
+                    ? set.datasets[(rep + participantId - 1) % set.datasets.Count]
+                    : datasetPool[(startDs + order) % datasetPool.Count];
                 _trials.Add(new TrialSpec
                 {
                     condition = condOrder[k],
                     dataset = ds,
                     orderIndex = order,
-                    trialInCondition = rep
+                    trialInCondition = rep,
+                    datasetSet = set != null ? set.name : ""
                 });
                 order++;
             }
         }
+        if (useSets) return;
 
         if (datasetPool.Count < _trials.Count - PracticeCount)
             Debug.LogWarning($"[Session] Only {datasetPool.Count} datasets for {_trials.Count - PracticeCount} " +
                              "trials -- some will repeat within the session. Add more datasets.");
+    }
+
+    private static bool DatasetSetsValid(List<DatasetSet> sets, int n)
+    {
+        if (sets == null || sets.Count != n) return false;
+        foreach (var s in sets)
+        {
+            if (s == null || s.datasets == null || s.datasets.Count == 0) return false;
+            foreach (var d in s.datasets) if (d == null) return false;
+        }
+        return true;
     }
 
     // Builds the condition order for one block (repeat) of trials:
@@ -756,6 +788,7 @@ private void Awake()
             datasetName = spec.dataset != null ? spec.dataset.name : "(none)",
             trialInCondition = spec.trialInCondition,
             isPractice = spec.isPractice,
+            datasetSet = spec.datasetSet ?? "",
             startedUtc = DateTime.UtcNow.ToString("o"),
             distractorStartNumber = UnityEngine.Random.Range(300, 999),
             questions = BuildQuestions(spec.dataset, spec.orderIndex)
@@ -1211,7 +1244,7 @@ private void Update()
         { "session_id", "participant_id", "condition", "audio_cue", "visual_cue", "presentation_order", "trial_in_condition",
           "dataset_id", "timestamp_start", "timestamp_end", "walk_seconds", "distractor_seconds",
           "distractor_start_number", "retrace_seconds", "recall_score", "recall_total",
-          "walk_samples", "retrace_samples" };
+          "walk_samples", "retrace_samples", "dataset_set" };
 
     private static readonly string[] QuestionsHeader =
         { "session_id", "participant_id", "condition", "audio_cue", "visual_cue", "presentation_order", "trial_in_condition",
@@ -1232,7 +1265,8 @@ private void Update()
           "unity_version", "condition_order_mode", "latin_square_row", "condition_order",
           "trials_per_condition", "practice_trials", "experiment_trials", "dataset_pool_size",
           "dataset_order", "audio_mode", "recall_input_mode", "semantic_visual_variant",
-          "area_width_m", "area_depth_m", "marker_gap_m", "sample_interval_s", "walk_length_m" };
+          "area_width_m", "area_depth_m", "marker_gap_m", "sample_interval_s", "walk_length_m",
+          "dataset_order_mode", "condition_dataset_sets" };
 
     private void WriteTrialCsv(TrialResult r)
     {
@@ -1246,7 +1280,7 @@ private void Update()
             r.distractorStartNumber.ToString(),
             r.retraceSeconds.ToString("0.###", CultureInfo.InvariantCulture),
             r.RecallScore.ToString(), r.questions.Count.ToString(),
-            r.walkPath.Count.ToString(), r.retracePath.Count.ToString()
+            r.walkPath.Count.ToString(), r.retracePath.Count.ToString(), r.datasetSet ?? ""
         });
     }
 
@@ -1407,8 +1441,23 @@ private void Update()
             experimentArea != null ? experimentArea.Depth.ToString("0.###", CultureInfo.InvariantCulture) : "",
             experimentArea != null ? experimentArea.MarkerGap.ToString("0.###", CultureInfo.InvariantCulture) : "",
             retraceSampleInterval.ToString("0.###", CultureInfo.InvariantCulture),
-            graphManager != null ? graphManager.TargetWalkLength.ToString("0.###", CultureInfo.InvariantCulture) : ""
+            graphManager != null ? graphManager.TargetWalkLength.ToString("0.###", CultureInfo.InvariantCulture) : "",
+            rs != null ? rs.datasetOrderMode.ToString() : "",
+            ConditionSetSummary()
         });
+    }
+
+    // M69: "Control=S3 Abstract=S4 ..." for session_info.csv (empty under Rotate).
+    private string ConditionSetSummary()
+    {
+        var seen = new List<string>();
+        foreach (var t in _trials)
+        {
+            if (t.isPractice || string.IsNullOrEmpty(t.datasetSet)) continue;
+            string e = $"{t.condition}={t.datasetSet}";
+            if (!seen.Contains(e)) seen.Add(e);
+        }
+        return string.Join(" ", seen);
     }
 
     private static float DatasetRange(GraphData d)

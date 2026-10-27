@@ -22,6 +22,7 @@ public class TrialSpec
     public int orderIndex;         // 0-based position within the session
     public int trialInCondition;   // 0-based repeat index for this condition
     public bool isPractice;        // tutorial trial (M60): logged to practice_*.csv, no questionnaire
+    public string datasetSet = ""; // M69: set name under LatinSquareSets, else empty
 }
 
 /// <summary>One tutorial (practice) trial: which cue set and which dataset. Same for every participant.</summary>
@@ -116,6 +117,7 @@ public class TrialResult
     public string datasetName;
     public int trialInCondition;
     public bool isPractice;
+    public string datasetSet = "";   // M69
 
     public string startedUtc;
     public string finishedUtc;
