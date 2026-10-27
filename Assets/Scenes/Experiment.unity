@@ -442,7 +442,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ExperimentArea
   size: {x: 4, y: 4}
-  markerGap: 0.4
+  markerGap: 0.2
   markerDepth: 0.6
 --- !u!4 &300438504
 Transform:
