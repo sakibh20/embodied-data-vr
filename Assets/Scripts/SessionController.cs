@@ -1266,7 +1266,8 @@ private void Update()
           "trials_per_condition", "practice_trials", "experiment_trials", "dataset_pool_size",
           "dataset_order", "audio_mode", "recall_input_mode", "semantic_visual_variant",
           "area_width_m", "area_depth_m", "marker_gap_m", "sample_interval_s", "walk_length_m",
-          "dataset_order_mode", "condition_dataset_sets" };
+          "dataset_order_mode", "condition_dataset_sets",
+          "app_version", "device_model", "tutorial_enabled" };
 
     private void WriteTrialCsv(TrialResult r)
     {
@@ -1443,7 +1444,10 @@ private void Update()
             retraceSampleInterval.ToString("0.###", CultureInfo.InvariantCulture),
             graphManager != null ? graphManager.TargetWalkLength.ToString("0.###", CultureInfo.InvariantCulture) : "",
             rs != null ? rs.datasetOrderMode.ToString() : "",
-            ConditionSetSummary()
+            ConditionSetSummary(),
+            // Which build ran (several headsets / sites may run the APK) and on what.
+            Application.version, SystemInfo.deviceModel,
+            rs != null ? rs.tutorialEnabled.ToString() : ""
         });
     }
 

@@ -16,7 +16,7 @@ MonoBehaviour:
   runType: 0
   recallInputMode: 1
   conditionOrderMode: 3
-  trialsPerCondition: 5
+  trialsPerCondition: 3
   datasetOrderMode: 1
   datasetSets:
   - name: S1

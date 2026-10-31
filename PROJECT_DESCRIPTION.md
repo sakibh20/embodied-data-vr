@@ -5,7 +5,8 @@
 > milestone (Mxx numbers below point there). Companion files: `HOW_TO_RUN.md` (running
 > sessions, building for the Quest, copying data), `XR_MODE_SWITCHING.md` (desktop vs
 > headset), `GRID_SETUP.md` (floor grid).
-> Last updated: 2026-10-27 (through M69).
+> Last updated: 2026-10-31 (through M69; default 3 trials per condition, extra
+> session_info columns).
 
 Study title used with participants: **"Audio and visual cues for remembering data in
 virtual reality"** (Tampere University MSc thesis). Unity 6000.3.10f1, URP, OpenXR,
@@ -52,7 +53,8 @@ practice trial and never appears in the experiment order (M60).
 - **Experiment sets (M69):** 25 of the other 28 datasets, grouped into **5 fixed sets of
   5** (`RunSettings.datasetSets`), matched on mean, SD, range, maximum, minimum, end
   value, mean day-to-day change and number of turns (set means differ by at most
-  ~1 kWh on each). Each participant walks all 25 once. Not used: d04 (unusually wide
+  ~1 kWh on each). With 3 trials per condition a participant walks 3 of the 5 datasets
+  in each set (15 in all); with 5 trials all 25. Not used: d04 (unusually wide
   range), d06 and d19 (unusually low values / flat). The full 28 stay in
   `SessionController.datasetPool` for the old rotation mode.
 
@@ -81,11 +83,11 @@ notice** on paper (`../Privacy Notice/`). Then, in VR:
    Practice 1/2 = Control on d43, Practice 2/2 = Tutorial cues on d37. Then
    "Tutorial complete — You have now completed the tutorial. The experiment starts
    next." (M60).
-6. **Experiment: 25 trials in 5 blocks** — one block per condition, 5 trials each, back
-   to back (`trialsPerCondition = 5`, M59/M61). Block order from a balanced Latin square
-   (§5).
+6. **Experiment: 15 trials in 5 blocks** — one block per condition, 3 trials each, back
+   to back (`trialsPerCondition = 3` in `RunSettings.asset` since 2026-10-31; it was 5,
+   M59/M61, i.e. 25 trials). Block order from a balanced Latin square (§5).
    - After **every** trial: recall questions (§2.2).
-   - After the **5th trial of each condition**: the post-condition questionnaire
+   - After the **last trial of each condition** (3rd by default): the post-condition questionnaire
      (intro screen "About this part of the study", then 16 items, §2.3).
 7. **End screen** — "Thank you! You can now remove the headset. The researcher will
    give you a laptop for four short open-ended questions." The four open-ended
@@ -102,7 +104,7 @@ notice** on paper (`../Privacy Notice/`). Then, in VR:
 | **Retrace** | Graph line, dots and labels hidden (grid and markers stay). A short instruction says to walk back to the green Start marker and walk the shape again from memory. Logging and the trial's cues re-arm on the Start marker; ends at the End marker. Cues stay on as in Walk (M53) and follow where the participant stands, so they add nothing the participant isn't already doing. | brief instruction, then hidden |
 | **RetraceReview** | The path just walked is drawn on the floor as a dot+line graph in the same style (same point count) for 5 s, then cleared (M44; no panel since M59). | hidden |
 | **Recall** | Four questions (§2.2), one per screen. Not skippable. | shown |
-| **Questionnaire** | Only after a condition's 5th trial (§2.3). | shown |
+| **Questionnaire** | Only after a condition's last trial (§2.3). | shown |
 | **TrialComplete** | "Walk back to the Start marker"; once the participant is on it, a **Start Next Trial** button appears. The next graph is only built after that (M39). | shown |
 
 Cues run **only** in Walk and Retrace (`SessionController.SetPhase` →
@@ -150,11 +152,11 @@ Along the walk: **Start marker | gap | graph zone | gap | End marker** (M56).
 
 - Graph zone: width = **area width** (default 4 m), depth = **walk length + 1 m**
   (default 3 + 1 = 4 m).
-- Gaps: **0.4 m** (marker gap setting) — silent transition buffers, outside the cue
+- Gaps: **0.2 m** (marker gap setting; 0.4 m before 2026-10-27) — silent transition buffers, outside the cue
   region.
 - Start / End markers: green and red rectangles with a "Start"/"End" label lying on
   the floor, as wide as the area and **0.6 m** deep (`EndpointMarkers.cs`).
-- Total footprint along the walk with defaults: 4 + 2 × (0.4 + 0.6) = **6.0 m**.
+- Total footprint along the walk with defaults: 4 + 2 × (0.2 + 0.6) = **5.6 m**.
 - On **Start Session** the area is re-anchored to the participant (M51): its walk
   direction = the way they face (yaw only), positioned so they stand in the middle of
   the Start marker. Everything (graph, grid, markers, cue field) is laid out from it.
@@ -263,8 +265,8 @@ panel is visible during a session. Every such action is logged in
 |---------|---------|-------|
 | Walk length | 3 m | 2–15 m (area depth follows: walk + 1 m) |
 | Area width | 4 m | 2–10 m |
-| Marker gap | 0.4 m | 0.1–1.5 m |
-| Trials per condition | 5 | 1–10 |
+| Marker gap | 0.2 m | 0.1–1.5 m |
+| Trials per condition | 3 | 1–10 |
 | Condition order | Latin square | Fixed / Random / Control first / Latin square |
 | Recall answers | number pad | number pad / 4 choices |
 | Audio cue | tempo only | pitch / tempo / both |
@@ -284,15 +286,18 @@ never changed. Every value actually used is written to `session_info.csv`.
 - **Condition order:** balanced (Williams) **Latin square**, 10 rows for 5 conditions,
   row = (participant − 1) mod 10. Over every 10 participants each condition appears
   twice in each position and each condition follows every other exactly twice (M47).
-  One order per participant; trials are **blocked** (all 5 trials of a condition back
+  One order per participant; trials are **blocked** (all trials of a condition back
   to back, M59).
 - **Datasets — Latin square too (M69, supervisor 2026-10-27):** condition *i* (in the
   order Control, Abstract, Representative, SemanticAudio, SemanticVisual) gets set
   S((i + p − 1) mod 5 + 1) for participant *p*, and within the set the five datasets
   start at position (p − 1) mod 5. Result, verified for participants 1–10: over every
   5 participants each set meets each condition once and each dataset takes each trial
-  slot (1st–5th in its block) once; with the 10-row condition square, over every 10
-  participants each set is also in each block position twice.
+  slot (1st–5th in its block) once (with 5 trials per condition); with the 10-row
+  condition square, over every 10 participants each set is also in each block position
+  twice. With 3 trials per condition (default since 2026-10-31) each participant gets 3
+  consecutive datasets of the set; over every 5 participants each dataset is used 3
+  times, once in each of the slots 1st–3rd.
 
   | Set | Datasets |
   |-----|----------|
@@ -318,7 +323,7 @@ z = along the walk, relative to the area centre; y = height.
 
 | File | One row per | Main columns |
 |------|-------------|--------------|
-| `session_info.csv` | session | run type, headset, Unity version, condition order mode + Latin-square row + order, trials per condition, practice/experiment counts, dataset pool size + order, audio mode, recall mode, spark variant, area width/depth, marker gap, sample interval, walk length, dataset order mode, condition→set (e.g. "Control=S1 Abstract=S2 …") |
+| `session_info.csv` | session | run type, headset, Unity version, condition order mode + Latin-square row + order, trials per condition, practice/experiment counts, dataset pool size + order, audio mode, recall mode, spark variant, area width/depth, marker gap, sample interval, walk length, dataset order mode, condition→set (e.g. "Control=S1 Abstract=S2 …"), app_version, device_model, tutorial_enabled (last three added 2026-10-31) |
 | `consent.csv` | consent answer | consent_version, response ("I consent" / "I do not consent"), timestamp, local time |
 | `background.csv` | background question | item_id, item_text, response (option text) |
 | `trials.csv` | trial | condition, audio_cue, visual_cue, presentation_order, trial_in_condition, dataset_id, start/end time, walk/distractor/retrace seconds, distractor start number, recall_score/total, walk/retrace sample counts, dataset_set (S1–S5) |
@@ -328,6 +333,25 @@ z = along the walk, relative to the area centre; y = height.
 | `graph_points.csv` | graph point per trial | dot_index, day_label, value, x, z — the ground truth the retrace is compared with |
 | `questionnaires.csv` | questionnaire item | instrument, subscale, item_id, item_text, scale, response |
 | `session_events.csv` | researcher/session event | event (session_started, skip_step, recentre_area, session_ended_early, session_complete), phase, detail |
+
+Notes for analysis (from the editor check of p01, 2026-10-31):
+
+- **Saved settings override the defaults.** Values changed in the in-app Settings are
+  stored on the device and used at every launch, so a device can run with values other
+  than `RunSettings.asset`. `session_info.csv` records the values actually used; check
+  it per participant (Reset to defaults on the Settings screen restores the asset).
+- `trial_in_condition` counts from 0; `presentation_order` from 1. Because the dataset
+  inside a set is `(trial_in_condition + participant − 1) mod 5`, the first 3 trials of
+  a 5-trial session have the same conditions and datasets as a 3-trial session for the
+  same participant number (the questionnaire was still answered after 5 walks).
+- `cues_on` = 1 means "inside the cue region", also in Control (where nothing plays);
+  `cue_value` is logged there too. Group by `condition`, not `cues_on`.
+- `retrace_seconds` includes walking back to the Start marker before logging starts;
+  use the retracing log's `t_seconds` for the logged retrace time.
+- Head height is constant in desktop runs (camera height); only headset runs have a
+  real `head_y`.
+- The test location is **not** logged; note it per participant (several headsets or
+  sites, see `claude/Supervisor_decisions.md`).
 
 Practice trials go to `practice_trials.csv`, `practice_value_questions.csv`,
 `practice_walking_log.csv`, `practice_retracing_log.csv`, `practice_graph_points.csv`,
@@ -393,3 +417,9 @@ Tools/                             install_quest_build / pull_quest_data (.bat +
   restarted under a new number (data so far is kept, `session_events.csv` shows it).
 - Clear the test participant folders from the editor/headset data before real
   collection.
+- **Headset taken off mid-session:** the Quest can reset its tracking origin when it
+  sleeps and wakes, so the anchored area no longer lines up (seen 2026-10-31; fix
+  planned in a separate commit). Until then: re-centre between trials from the
+  researcher menu and note it.
+- Information sheet still says 25 walks in five sets and "a VR lab at Tampere
+  University"; to be updated for 3 trials per condition and Atalpa.
