@@ -119,13 +119,26 @@ public class SessionUI : MonoBehaviour
         // itself the same way Walk does, so it doesn't occlude the floor graph while
         // they actually retrace. Idle/Distractor/Recall/Complete all need a real
         // interaction (button or MCQ), so the panel stays visible there.
+        // Retrace in two steps, like the between-trials screen: first "walk back to the
+        // Start marker"; once on it, "walk the shape from memory" + a Start button; after
+        // Start the panel hides so it doesn't cover the floor.
         if (phase == SessionPhase.Retrace)
         {
+            if (session.RetraceStarted) { _view.gameObject.SetActive(false); return; }
             _view.gameObject.SetActive(true);
-            _view.Title.text = "Retrace";
-            _view.Body.text = "Walk back and stand on the green Start marker, then retrace the shape you just " +
-                               "walked -- from memory.";
-            Invoke(nameof(HidePanel), retraceInstructionSeconds);
+            string tag = session.TrialTag + "   ";
+            _view.Title.text = tag + "Retrace";
+            if (session.RetraceReady)
+            {
+                _view.Body.text = "Now walk the shape again <b>from memory</b>, to the red <b>End</b> marker.\n\n" +
+                                  "Press <b>Start</b> when you're ready.";
+                Cta(AddOptionButton("Start", () => session.BeginRetrace()));
+            }
+            else
+            {
+                _view.Body.text = (session.CountingSeconds > 0f ? "<b>Stop counting.</b>\n\n" : "") +
+                                  "Walk back to the green <b>Start</b> marker.";
+            }
             return;
         }
 
@@ -175,9 +188,18 @@ public class SessionUI : MonoBehaviour
 
             case SessionPhase.Distractor:
                 _view.Title.text = trialTag + "Counting task";
-                _view.Body.text = $"Count out loud backwards from <b>{session.DistractorStartNumber}</b> " +
-                             "in steps of 3, until told to stop.";
-                Cta(AddOptionButton("Done", () => session.EndDistractor()));
+                if (session.CountingSeconds > 0f)
+                {
+                    // Timed (ends by itself, see SessionController.EndWalk).
+                    _view.Body.text = $"Count out loud backwards from <b>{session.DistractorStartNumber}</b> " +
+                                      "in steps of 3.\n\nKeep counting until the screen tells you to stop.";
+                }
+                else
+                {
+                    _view.Body.text = $"Count out loud backwards from <b>{session.DistractorStartNumber}</b> " +
+                                      "in steps of 3, until told to stop.";
+                    Cta(AddOptionButton("Done", () => session.EndDistractor()));
+                }
                 break;
 
             case SessionPhase.Recall:
@@ -378,7 +400,7 @@ public class SessionUI : MonoBehaviour
 
         var r2 = AddSettingsRow();
         AddStepper(r2, "Marker gap", $"{v.markerGap:0.0} m",
-            d => { v.markerGap = RuntimeSettings.Step(v.markerGap, 0.1f, 0.1f, 1.5f, d); Changed(); });
+            d => { v.markerGap = RuntimeSettings.Step(v.markerGap, 0.1f, 0f, 1.5f, d); Changed(); });
         AddStepper(r2, "Trials / condition", v.trialsPerCondition.ToString(),
             d => { v.trialsPerCondition = Mathf.Clamp(v.trialsPerCondition + d, 1, 10); Changed(); });
 

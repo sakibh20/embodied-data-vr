@@ -107,6 +107,12 @@ public class RunSettings : ScriptableObject
              "5 x n datasets to avoid repeats.")]
     [Range(1, 10)] public int trialsPerCondition = 1;
 
+    [Header("Counting task (distractor)")]
+    [Tooltip("Seconds the participant counts backwards before the system tells them to stop " +
+             "and moves on to Retrace by itself, so the time between Walk and Retrace is the " +
+             "same in every trial. 0 = old behaviour: a Done button ends it.")]
+    [Range(0, 60)] public float distractorSeconds = 5f;
+
     [Header("Dataset assignment (M69)")]
     [Tooltip("LatinSquareSets (supervisor, 2026-10-27): datasets come in 5 fixed sets and the set " +
              "for each condition is Latin-square rotated by participant. Rotate: the old pool rotation.")]

@@ -53,6 +53,8 @@ public class SimParticipant : MonoBehaviour
                 {
                     case SessionPhase.Distractor: _session.EndDistractor(); break;
                     case SessionPhase.RetraceReview: _session.EndRetraceReview(); break;
+                    case SessionPhase.Retrace:   // two-step retrace: press Start once on the marker
+                        if (_session.RetraceReady && !_session.RetraceStarted) _session.BeginRetrace(); break;
                     case SessionPhase.Recall:
                         var q = _session.CurrentQuestion;
                         if (q != null) _session.AnswerCurrentQuestionText(
@@ -74,6 +76,8 @@ public class SimParticipant : MonoBehaviour
         if (phase != _routeFor || _session.TrialNumber != _routeTrial) BuildRoute(phase);
         if (phase == SessionPhase.Instructions && autoAnswer) { _session.BeginTutorial(); return; }
         if (_leg >= _route.Count) return;
+        // Retrace: wait on the Start marker until Start has been pressed.
+        if (phase == SessionPhase.Retrace && !_session.RetraceStarted && _leg >= 1) return;
         Transform head = PlayerRig.Head != null ? PlayerRig.Head : mover;
         Vector3 pos = head.position; pos.y = 0f;
         Vector3 target = new Vector3(_route[_leg].x, 0f, _route[_leg].z);

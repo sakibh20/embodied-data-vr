@@ -442,7 +442,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ExperimentArea
   size: {x: 4, y: 4}
-  markerGap: 0.2
+  markerGap: 0
   markerDepth: 0.6
 --- !u!4 &300438504
 Transform:
@@ -1034,7 +1034,7 @@ MonoBehaviour:
   postConditionQuestionnaire: {fileID: 11400000, guid: edae05a83ef9b1e4b943e1c451057720, type: 2}
   alignAreaToParticipantOnStart: 1
   experimentArea: {fileID: 0}
-  retraceReviewSeconds: 5
+  retraceReviewSeconds: 1
   autoEndOvershoot: 0.3
   autoEndGracePeriod: 0.5
   debugKeys: 1

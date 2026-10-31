@@ -20,7 +20,7 @@ public class ExperimentArea : MonoBehaviour
     [Tooltip("Safe gap (metres) between the graph zone (this area's near/far edge) and the " +
              "Start / End markers. Standing in the gap gives no feedback and does not count " +
              "as being at the start or the end -- a transition buffer.")]
-    [SerializeField] private float markerGap = 0.2f;
+    [SerializeField] private float markerGap = 0f;
     [Tooltip("Depth (metres, along the walk) of the Start and End marker zones.")]
     [SerializeField] private float markerDepth = 0.6f;
 

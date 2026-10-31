@@ -15,7 +15,7 @@ public class RuntimeValues
 {
     public float walkLength = 3f;          // m, graph length along the walk
     public float areaWidth = 4f;           // m, width of the area / markers / cue field
-    public float markerGap = 0.2f;         // m, safe gap graph <-> Start/End marker
+    public float markerGap = 0f;           // m, gap graph zone <-> Start/End marker (0 since 2026-10-31)
     public int trialsPerCondition = 1;
     public ConditionOrderMode conditionOrder = ConditionOrderMode.LatinSquare;
     public RecallInputMode recallInput = RecallInputMode.TextEntry;
@@ -51,7 +51,7 @@ public static class RuntimeSettings
         {
             walkLength = graph != null ? graph.TargetWalkLength : 3f,
             areaWidth = area != null ? area.Width : 4f,
-            markerGap = area != null ? area.MarkerGap : 0.2f,
+            markerGap = area != null ? area.MarkerGap : 0f,
             trialsPerCondition = rs != null ? rs.trialsPerCondition : 1,
             conditionOrder = rs != null ? rs.conditionOrderMode : ConditionOrderMode.LatinSquare,
             recallInput = rs != null ? rs.recallInputMode : RecallInputMode.TextEntry,

@@ -51,6 +51,9 @@ public class SessionBootstrap : MonoBehaviour
         // M63: the standalone Quest build is always VR, whatever the editor setting says.
         mode = RunType.VR;
 #endif
+        // Record the mode actually used (session_info.csv run_type read the asset value,
+        // so Quest sessions were logged as "Desktop"). Safe: settings is a runtime copy.
+        if (settings != null) settings.runType = mode;
         ApplyRunType(mode);
 
         if (audioModeSelector != null)

@@ -5,8 +5,8 @@
 > milestone (Mxx numbers below point there). Companion files: `HOW_TO_RUN.md` (running
 > sessions, building for the Quest, copying data), `XR_MODE_SWITCHING.md` (desktop vs
 > headset), `GRID_SETUP.md` (floor grid).
-> Last updated: 2026-10-31 (through M69; default 3 trials per condition, extra
-> session_info columns).
+> Last updated: 2026-10-31 (through M69; 3 trials per condition, two-step retrace,
+> timed counting task, 1 s review, no marker gap, extra session_info columns).
 
 Study title used with participants: **"Audio and visual cues for remembering data in
 virtual reality"** (Tampere University MSc thesis). Unity 6000.3.10f1, URP, OpenXR,
@@ -100,9 +100,9 @@ notice** on paper (`../Privacy Notice/`). Then, in VR:
 | Phase | What happens | Panel |
 |-------|--------------|-------|
 | **Walk** | The graph (dots, line, value labels, grid) and the green Start / red End floor markers are shown. Cues and movement logging start once the participant stands on the **Start marker**; the phase ends when they reach the **End marker**. | hidden |
-| **Distractor** | "Count out loud backwards from *N* in steps of 3, until told to stop." (*N* random, 300–998); researcher/participant presses Done. Cues off. | shown |
-| **Retrace** | Graph line, dots and labels hidden (grid and markers stay). A short instruction says to walk back to the green Start marker and walk the shape again from memory. Logging and the trial's cues re-arm on the Start marker; ends at the End marker. Cues stay on as in Walk (M53) and follow where the participant stands, so they add nothing the participant isn't already doing. | brief instruction, then hidden |
-| **RetraceReview** | The path just walked is drawn on the floor as a dot+line graph in the same style (same point count) for 5 s, then cleared (M44; no panel since M59). | hidden |
+| **Distractor** | "Count out loud backwards from *N* in steps of 3." (*N* random, 300–998). **Timed** (2026-10-31): after the counting time (**5 s**, `RunSettings.distractorSeconds` in the Unity asset; not an in-app setting) the phase ends by itself and the next screen says "Stop counting", so every trial has the same delay between Walk and Retrace. Counting time 0 = the old "until told to stop" text with a Done button. Cues off. | shown |
+| **Retrace** | Graph line, dots and labels hidden (grid and markers stay). **Two steps** (2026-10-31), like the between-trials screen: (1) the panel says "Stop counting. Walk back to the green Start marker"; (2) once the participant stands on it, "Now walk the shape again from memory, to the red End marker. Press Start when you're ready" + **Start**. After Start the panel hides; logging and the trial's cues arm from there (participant on the marker) and the phase ends at the End marker. Stepping off the marker before Start takes the button away again. Cues stay on as in Walk (M53) and follow where the participant stands. | step 1–2 shown, then hidden |
+| **RetraceReview** | The path just walked is drawn on the floor as a dot+line graph in the same style (same point count) for **1 s** (was 5 s until 2026-10-31), then cleared and Recall starts (M44; no panel since M59). | hidden |
 | **Recall** | Four questions (§2.2), one per screen. Not skippable. | shown |
 | **Questionnaire** | Only after a condition's last trial (§2.3). | shown |
 | **TrialComplete** | "Walk back to the Start marker"; once the participant is on it, a **Start Next Trial** button appears. The next graph is only built after that (M39). | shown |
@@ -152,11 +152,10 @@ Along the walk: **Start marker | gap | graph zone | gap | End marker** (M56).
 
 - Graph zone: width = **area width** (default 4 m), depth = **walk length + 1 m**
   (default 3 + 1 = 4 m).
-- Gaps: **0.2 m** (marker gap setting; 0.4 m before 2026-10-27) — silent transition buffers, outside the cue
-  region.
+- Gaps: **0 m** (marker gap setting; since 2026-10-31 the markers touch the graph zone; 0.2 m from 2026-10-27, 0.4 m before). The graph zone already has 0.5 m before the first and after the last point, so the cue region still starts and ends 0.5 m from the dots.
 - Start / End markers: green and red rectangles with a "Start"/"End" label lying on
   the floor, as wide as the area and **0.6 m** deep (`EndpointMarkers.cs`).
-- Total footprint along the walk with defaults: 4 + 2 × (0.2 + 0.6) = **5.6 m**.
+- Total footprint along the walk with defaults: 4 + 2 × (0 + 0.6) = **5.2 m**.
 - On **Start Session** the area is re-anchored to the participant (M51): its walk
   direction = the way they face (yaw only), positioned so they stand in the middle of
   the Start marker. Everything (graph, grid, markers, cue field) is laid out from it.
@@ -265,7 +264,7 @@ panel is visible during a session. Every such action is logged in
 |---------|---------|-------|
 | Walk length | 3 m | 2–15 m (area depth follows: walk + 1 m) |
 | Area width | 4 m | 2–10 m |
-| Marker gap | 0.2 m | 0.1–1.5 m |
+| Marker gap | 0 m | 0–1.5 m |
 | Trials per condition | 3 | 1–10 |
 | Condition order | Latin square | Fixed / Random / Control first / Latin square |
 | Recall answers | number pad | number pad / 4 choices |
@@ -323,7 +322,7 @@ z = along the walk, relative to the area centre; y = height.
 
 | File | One row per | Main columns |
 |------|-------------|--------------|
-| `session_info.csv` | session | run type, headset, Unity version, condition order mode + Latin-square row + order, trials per condition, practice/experiment counts, dataset pool size + order, audio mode, recall mode, spark variant, area width/depth, marker gap, sample interval, walk length, dataset order mode, condition→set (e.g. "Control=S1 Abstract=S2 …"), app_version, device_model, tutorial_enabled (last three added 2026-10-31) |
+| `session_info.csv` | session | run type, headset, Unity version, condition order mode + Latin-square row + order, trials per condition, practice/experiment counts, dataset pool size + order, audio mode, recall mode, spark variant, area width/depth, marker gap, sample interval, walk length, dataset order mode, condition→set (e.g. "Control=S1 Abstract=S2 …"), app_version, device_model, tutorial_enabled, counting_seconds_setting (last four added 2026-10-31) |
 | `consent.csv` | consent answer | consent_version, response ("I consent" / "I do not consent"), timestamp, local time |
 | `background.csv` | background question | item_id, item_text, response (option text) |
 | `trials.csv` | trial | condition, audio_cue, visual_cue, presentation_order, trial_in_condition, dataset_id, start/end time, walk/distractor/retrace seconds, distractor start number, recall_score/total, walk/retrace sample counts, dataset_set (S1–S5) |
@@ -346,10 +345,22 @@ Notes for analysis (from the editor check of p01, 2026-10-31):
   same participant number (the questionnaire was still answered after 5 walks).
 - `cues_on` = 1 means "inside the cue region", also in Control (where nothing plays);
   `cue_value` is logged there too. Group by `condition`, not `cues_on`.
-- `retrace_seconds` includes walking back to the Start marker before logging starts;
-  use the retracing log's `t_seconds` for the logged retrace time.
+- `retrace_seconds` includes walking back to the Start marker and waiting before Start
+  is pressed; logging starts at Start, so use the retracing log's `t_seconds` (first to
+  last sample) for the logged retrace time.
+- `distractor_seconds` is the counting time actually spent: ≈ the setting when timed,
+  shorter if the researcher skipped the step. Sessions before 2026-10-31 used the Done
+  button, so their counting times vary.
 - Head height is constant in desktop runs (camera height); only headset runs have a
   real `head_y`.
+- **First headset export (2026-10-31, Quest 2, DataExportKit):** all 15 files arrived
+  and were complete; head height 1.3–1.5 m, positions inside the area. Two logging bugs
+  found and fixed in code (in effect from the next build): `run_type` was the asset
+  value, so Quest sessions said "Desktop" (`xr_device` = "Head Tracking - OpenXR" and
+  `device_model` = "Oculus Quest 2" show the headset); and movement was sampled every
+  0.111 s (≈9 Hz at 72 fps) instead of 0.1 s, because the sample timer dropped the
+  overshoot. Data from earlier builds: use `device_model`/`xr_device`, and the logged
+  `t_seconds` rather than an assumed 10 Hz.
 - The test location is **not** logged; note it per participant (several headsets or
   sites, see `claude/Supervisor_decisions.md`).
 

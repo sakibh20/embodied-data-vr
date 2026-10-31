@@ -75,7 +75,7 @@ public class SessionController : MonoBehaviour
              "as the real graph) after Retrace ends, before Recall questions begin. " +
              "Shown only AFTER retrace, never while walking -- Retrace itself stays a " +
              "pure memory test. See ROADMAP.md M44.")]
-    [SerializeField] private float retraceReviewSeconds = 5f;
+    [SerializeField] private float retraceReviewSeconds = 1f;
 
     [Header("Walk/Retrace auto-end (UI is hidden during these phases -- see SessionUI)")]
     [Tooltip("Metres the participant must walk past the far end of the graph corridor " +
@@ -835,11 +835,33 @@ private void Awake()
         WriteGraphPointsCsv(_result);
         WriteMovementCsv(_result, "walking_log.csv", _result.walkPath);
         SetPhase(SessionPhase.Distractor);
+        // Timed counting task: ends by itself, so every trial has the same delay
+        // between Walk and Retrace (0 = Done button, the old behaviour).
+        if (CountingSeconds > 0f) Invoke(nameof(EndDistractor), CountingSeconds);
+    }
+
+    /// <summary>Length of the counting task in seconds; 0 = ended with a Done button.</summary>
+    public float CountingSeconds =>
+        StudyConfig.Settings != null ? Mathf.Max(0f, StudyConfig.Settings.distractorSeconds) : 0f;
+
+    /// <summary>Retrace, step 1: the participant walks back to the Start marker (panel says so).
+    /// True once they stand on it, so the panel can offer the Start button.</summary>
+    public bool RetraceReady { get; private set; }
+    /// <summary>Retrace, step 2: the participant pressed Start; logging and cues arm from here.</summary>
+    public bool RetraceStarted { get; private set; }
+
+    /// <summary>Called by the panel's Start button on the Start marker during Retrace.</summary>
+    public void BeginRetrace()
+    {
+        if (_phase != SessionPhase.Retrace || RetraceStarted) return;
+        RetraceStarted = true;
+        PhaseChanged?.Invoke(_phase);   // hides the panel
     }
 
     public void EndDistractor()
     {
         if (_phase != SessionPhase.Distractor) return;
+        CancelInvoke(nameof(EndDistractor));
         _result.distractorSeconds = Time.time - _phaseStart;
 
         // Retrace: hide the line/dots. M53 (supervisor): the trial's audio + visual cues
@@ -848,6 +870,8 @@ private void Awake()
         graphManager.SetGraphVisible(false);
         _result.retracePath.Clear();
         _retraceTimer = 0f;
+        RetraceReady = false;
+        RetraceStarted = false;
         SetPhase(SessionPhase.Retrace);
     }
 
@@ -1084,7 +1108,10 @@ private void Update()
             _retraceTimer -= Time.deltaTime;
             if (_retraceTimer <= 0f)
             {
-                _retraceTimer = retraceSampleInterval;
+                // Carry the overshoot over so the mean rate is the set rate (resetting to
+                // the full interval gave 0.111 s steps at the Quest's 72 Hz, i.e. 9 Hz).
+                _retraceTimer += retraceSampleInterval;
+                if (_retraceTimer <= 0f) _retraceTimer = retraceSampleInterval;
                 Vector3 p = head.position;
                 var path = _phase == SessionPhase.Walk ? _result.walkPath : _result.retracePath;
                 if (_walkDriver == null) _walkDriver = FindAnyObjectByType<WalkValueDriver>();
@@ -1158,6 +1185,16 @@ private void Update()
 
         bool atStart = experimentArea != null ? experimentArea.IsInStartZone(head.position)
                                               : d <= autoEndOvershoot;
+
+        // Retrace in two steps: walk back to Start (panel), then press Start on the
+        // marker. Until then nothing is armed or logged; the panel only re-renders when
+        // "on the marker" flips, as on the between-trials screen.
+        if (_phase == SessionPhase.Retrace && !RetraceStarted)
+        {
+            if (atStart != RetraceReady) { RetraceReady = atStart; PhaseChanged?.Invoke(_phase); }
+            return;
+        }
+
         if (atStart && !_hasVisitedStartThisPhase)
         {
             _hasVisitedStartThisPhase = true;
@@ -1267,7 +1304,7 @@ private void Update()
           "dataset_order", "audio_mode", "recall_input_mode", "semantic_visual_variant",
           "area_width_m", "area_depth_m", "marker_gap_m", "sample_interval_s", "walk_length_m",
           "dataset_order_mode", "condition_dataset_sets",
-          "app_version", "device_model", "tutorial_enabled" };
+          "app_version", "device_model", "tutorial_enabled", "counting_seconds_setting" };
 
     private void WriteTrialCsv(TrialResult r)
     {
@@ -1447,7 +1484,8 @@ private void Update()
             ConditionSetSummary(),
             // Which build ran (several headsets / sites may run the APK) and on what.
             Application.version, SystemInfo.deviceModel,
-            rs != null ? rs.tutorialEnabled.ToString() : ""
+            rs != null ? rs.tutorialEnabled.ToString() : "",
+            CountingSeconds.ToString("0.###", CultureInfo.InvariantCulture)
         });
     }
 

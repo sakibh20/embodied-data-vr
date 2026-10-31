@@ -17,6 +17,7 @@ MonoBehaviour:
   recallInputMode: 1
   conditionOrderMode: 3
   trialsPerCondition: 3
+  distractorSeconds: 5
   datasetOrderMode: 1
   datasetSets:
   - name: S1
